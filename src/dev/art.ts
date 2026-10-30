@@ -16,17 +16,59 @@ canvas.height = H;
 const c = canvas.getContext('2d')!;
 const k = W / 1200;
 
-const ground = H - 34 * k;
-const sr = 50 * k;
-const sx = W - 105 * k;
-const sy = H * 0.5;
+type Kind = Parameters<typeof drawItem>[1];
+
+/** 置き場所（その絵のピクセル）。サムネはカードで上 370px（トップページは 420px）だけ見えるので、顔とタイトルを上に寄せる */
+const ART = og
+  ? {
+      ground: H - 34,
+      charR: 50,
+      charX: [204, 372, 540, 708, 876],
+      spiki: { x: W - 105, y: H * 0.5, r: 50 },
+      title: { x: W * 0.45, pill: 26, sub: [104, 52], main: [184, 104] },
+      items: [
+        ['candy', 90, 120, 30],
+        ['star', 250, 210, 34],
+        ['shucaron', 960, 260, 36],
+        ['mokaron', 1090, 110, 34],
+        ['candy', 870, 70, 28],
+        ['star', 380, 60, 26],
+        ['hobagi', 590, 300, 38],
+        ['candy', 1135, 560, 24],
+      ] as [Kind, number, number, number][],
+      floor: [] as [Kind, number, number, number][],
+    }
+  : {
+      ground: 392,
+      charR: 46,
+      charX: [78, 190, 302, 414, 526],
+      spiki: { x: 700, y: 236, r: 36 },
+      title: { x: 336, pill: 12, sub: [66, 36], main: [124, 74] },
+      items: [
+        ['candy', 36, 92, 20],
+        ['star', 640, 40, 22],
+        ['mokaron', 752, 70, 24],
+        ['shucaron', 612, 128, 22],
+        ['hobagi', 258, 200, 20],
+      ] as [Kind, number, number, number][],
+      floor: [
+        ['candy', 90, 452, 24],
+        ['star', 230, 456, 26],
+        ['mokaron', 380, 452, 28],
+        ['shucaron', 530, 452, 28],
+        ['candy', 670, 456, 24],
+      ] as [Kind, number, number, number][],
+    };
+
+const ground = ART.ground;
+const { x: sx, y: sy, r: sr } = ART.spiki;
 const L: Layout = {
   w: W,
   h: H,
   portrait: false,
   field: { x: 0, y: 0, w: W, h: ground },
   ground,
-  headR: 50 * k,
+  headR: ART.charR,
   catchY: 0.8,
   spiki: { x: sx, y: sy, r: sr, feet: sy + CROUCH_FEET_R * sr },
   score: { x: 0, y: 0, w: 0, h: 0 },
@@ -45,34 +87,23 @@ function draw(): void {
 
   // スピキ（泣いてる）
   drawChibi(c, SPIKI, sx, sy, sr, { expr: 'worried', t: 0.3, turn: -1 });
-  bubble(c, 'ｳｱｱｰﾝ!!', sx - 40 * k, sy - sr * 2.1, 22 * k, sx - 10 * k, '#e4f6ff');
+  bubble(c, 'ｳｱｱｰﾝ!!', sx - 0.8 * sr, sy - sr * 2.1, 22 * k, sx - 0.2 * sr, '#e4f6ff');
 
-  // 降ってくるお菓子
-  const items: [Parameters<typeof drawItem>[1], number, number, number][] = [
-    ['candy', 90, 120, 30],
-    ['star', 250, 210, 34],
-    ['shucaron', 960, 260, 36],
-    ['mokaron', 1090, 110, 34],
-    ['candy', 870, 70, 28],
-    ['star', 380, 60, 26],
-    ['hobagi', 590, 300, 38],
-    ['candy', 1135, 560, 24],
-  ];
-  items.forEach(([kind, x, y, r], i) => drawItem(c, kind, x * k, y * k, r * k, { t: 0.4, phase: i * 1.3, id: i }));
+  // 降ってくるお菓子と、地面に並べたお菓子
+  [...ART.items, ...ART.floor].forEach(([kind, x, y, r], i) => drawItem(c, kind, x, y, r, { t: 0.4, phase: i * 1.3, id: i }));
 
   // 5 人
   const exprs: Expr[] = ['munch', 'happy', 'happy', 'smile', 'happy'];
   const ids = ['kommy', 'elfin', 'butter', 'yomi', 'joanne'] as const;
-  const r = 50 * k;
-  const span = W * 0.7;
+  const r = ART.charR;
   ids.forEach((id, i) => {
-    const x = W * 0.1 + (span * (i + 0.5)) / 5;
+    const x = ART.charX[i];
     const lift = i % 2 ? 6 * k : 0;
     drawChibi(c, CHAR_SPECS[id], x, ground - FEET_R * r - lift, r, { expr: exprs[i], t: 0.4, turn: i < 2 ? 1 : -1, prop: true, tilt: (i - 2) * 0.04 });
   });
 
   // タイトル
-  const tx = W * 0.45;
+  const { x: tx, pill: py, sub, main } = ART.title;
   c.save();
   c.font = font(20 * k);
   const pill = 'トリッカル 非公式ファンゲーム';
@@ -81,22 +112,21 @@ function draw(): void {
   c.strokeStyle = 'rgba(255,255,255,0.45)';
   c.lineWidth = 2;
   c.beginPath();
-  c.roundRect(tx - pw / 2, 26 * k, pw, 36 * k, 18 * k);
+  c.roundRect(tx - pw / 2, py, pw, 36 * k, 18 * k);
   c.fill();
   c.stroke();
   c.fillStyle = C.white;
   c.textAlign = 'center';
   c.textBaseline = 'middle';
-  c.fillText(pill, tx, 45 * k);
+  c.fillText(pill, tx, py + 19 * k);
   c.translate(tx, 0);
   c.rotate(-0.04);
-  outlined(c, 'おばけの国の', 0, 104 * k, { size: 52 * k, font: popFont(52 * k), fill: '#e6d6ff', stroke: C.ink, width: 14 * k });
-  outlined(c, 'おかしキャッチ', 0, 184 * k, { size: 104 * k, font: popFont(104 * k), fill: '#ffc24d', stroke: C.ink, width: 22 * k });
+  outlined(c, 'おばけの国の', 0, sub[0], { size: sub[1], font: popFont(sub[1]), fill: '#e6d6ff', stroke: C.ink, width: sub[1] * 0.27 });
+  outlined(c, 'おかしキャッチ', 0, main[0], { size: main[1], font: popFont(main[1]), fill: '#ffc24d', stroke: C.ink, width: main[1] * 0.21 });
   c.restore();
   // ?kind=… を headless の --dump-dom で取り出せるよう、PNG を本文に書き出す
   const out = document.createElement('pre');
   out.id = 'png';
   out.textContent = canvas.toDataURL('image/png');
   document.body.append(out);
-
 }
