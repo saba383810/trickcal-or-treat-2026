@@ -168,6 +168,8 @@ export function mochiChibi(
   place('top', -m / ht);
   place('width', (w + 2 * m) / w);
   place('height', (ht + 2 * m) / ht);
+  // 引っぱっていない間は置かない（枠より大きいので、画面の端のキャラだと横スクロールが出てしまう）
+  over.style.display = 'none';
   const wrap = h('span', { class: 'mochi' }, base, over);
 
   const shown = () => base.getBoundingClientRect().height / ht || 1;
@@ -203,6 +205,7 @@ export function mochiChibi(
     raf = 0;
     last = 0;
     over.getContext('2d')!.clearRect(0, 0, over.width, over.height);
+    over.style.display = 'none';
     base.style.visibility = '';
     wrap.style.zIndex = '';
   };
@@ -237,6 +240,7 @@ export function mochiChibi(
     start = { x: e.clientX, y: e.clientY };
     pulled = false;
     opts.sound?.mochiGrab();
+    over.style.display = '';
     draw();
     base.style.visibility = 'hidden';
     if (!raf) raf = requestAnimationFrame(tick);

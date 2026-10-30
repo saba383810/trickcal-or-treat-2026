@@ -59,7 +59,9 @@ body {
   display: flex;
   padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom))
     max(12px, env(safe-area-inset-left));
-  overflow: auto;
+  /* 縦だけスクロールする。ほっぺを引っぱる時の重ねた canvas が画面の端からはみ出しても、横には動かさない */
+  overflow: hidden auto;
+  overscroll-behavior: contain;
   pointer-events: auto;
   background: rgba(16, 8, 34, 0.45);
 }
