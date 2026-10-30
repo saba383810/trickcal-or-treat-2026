@@ -5,7 +5,7 @@ import type { CharId } from './config/characters';
 import { World } from './sim/world';
 import { loadSave, writeSave, type SaveData } from './storage';
 import { capture, h } from './ui/dom';
-import { charSelect, howToPanel, pausePanel, resultPanel, settingsPanel, titleScreen, type MenuHost } from './ui/menus';
+import { charSelect, howToPanel, pausePanel, recordsPanel, resultPanel, settingsPanel, titleScreen, type MenuHost } from './ui/menus';
 import { SceneCache, drawLiveDecor } from './view/draw/scene';
 import { outlined } from './view/draw/ui';
 import { GameView } from './view/gameView';
@@ -85,6 +85,7 @@ export class App implements MenuHost {
       titleScreen(this, {
         start: () => this.goSelect(),
         howTo: () => this.showHowTo(() => this.goTitle()),
+        records: () => this.show(recordsPanel(this, { close: () => this.goTitle() })),
         settings: () => this.show(settingsPanel(this, { close: () => this.goTitle() })),
       }),
     );
@@ -177,7 +178,7 @@ export class App implements MenuHost {
   }
 
   /**
-   * 開発用: URL の ?dev=select|howto|settings|pause|play|result で画面を飛ばす（スクリーンショットの確認用）。
+   * 開発用: URL の ?dev=select|howto|settings|records|pause|play|result で画面を飛ばす（スクリーンショットの確認用）。
    * play は &char= &t=（その秒まで進める） &cry=（スピキの泣きレベル） &fever &bot（ボットが遊ぶ）
    */
   devJump(q: URLSearchParams, makeBot: (w: World) => { step(): void }): void {
@@ -186,6 +187,7 @@ export class App implements MenuHost {
     if (dev === 'select') return this.goSelect();
     if (dev === 'howto') return this.showHowTo(() => this.goTitle());
     if (dev === 'settings') return this.show(settingsPanel(this, { close: () => this.goTitle() }));
+    if (dev === 'records') return this.show(recordsPanel(this, { close: () => this.goTitle() }));
     this.start(id);
     const w = this.world!;
     const view = this.view!;

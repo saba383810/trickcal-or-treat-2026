@@ -6,7 +6,7 @@ import { CHAR_TEXT, DISCLAIMER, GAME_TITLE, ITEM_TEXT, RANK_TEXT, SHARE_URL, TIT
 import type { World } from '../sim/world';
 import type { SaveData } from '../storage';
 import { CHAR_SPECS, SPIKEY, SPIKI } from '../view/draw/characters';
-import type { Expr } from '../view/draw/chibi';
+import type { ChibiSpec, Expr } from '../view/draw/chibi';
 import { C } from '../view/palette';
 import { h, itemCanvas, mochiChibi, starsText } from './dom';
 
@@ -41,15 +41,30 @@ function rankBadge(r: RankId | undefined, cls = ''): HTMLElement {
 
 // ===================================================================== タイトル
 
-export function titleScreen(host: MenuHost, on: { start: () => void; howTo: () => void; settings: () => void }): HTMLElement {
+export function titleScreen(
+  host: MenuHost,
+  on: { start: () => void; howTo: () => void; records: () => void; settings: () => void },
+): HTMLElement {
   const s = host.sound;
-  const cast = h('div', { class: 'title-cast' });
-  const exprs: Expr[] = ['normal', 'happy', 'smile', 'normal', 'smile'];
-  CHAR_ORDER.forEach((id, i) => cast.append(mochiChibi(CHAR_SPECS[id], exprs[i], 34, { sound: s, flip: i >= 3 })));
-  const spiki = h('div', { class: 'title-spiki' }, mochiChibi(SPIKI, 'worried', 30, { sound: s, flip: true }));
+  // 全員で並ぶ。まん中はバターとコミー（向かい合って、少し大きく前に）
+  const cast: [ChibiSpec, Expr, number, boolean][] = [
+    [CHAR_SPECS.yomi, 'normal', 0.9, false],
+    [CHAR_SPECS.elfin, 'happy', 0.9, false],
+    [CHAR_SPECS.butter, 'happy', 1.15, false],
+    [CHAR_SPECS.kommy, 'smile', 1.15, true],
+    [CHAR_SPECS.joanne, 'smile', 0.9, true],
+    [SPIKI, 'worried', 0.8, true],
+  ];
+  const row = h('div', { class: 'title-cast' });
+  for (const [spec, expr, k, flip] of cast) {
+    const m = mochiChibi(spec, expr, 34 * k, { sound: s, flip });
+    m.style.setProperty('--k', String(k));
+    if (k > 1) m.classList.add('lead');
+    row.append(m);
+  }
   const total = host.save.sweets;
   const t = titleOf(total);
-  const next = [...TITLES].reverse().find((x) => x.min > total);
+  const next = nextTitle(total);
   return h(
     'div',
     { class: 'screen title' },
@@ -59,12 +74,25 @@ export function titleScreen(host: MenuHost, on: { start: () => void; howTo: () =
       h('span', { class: 'logo-sub' }, 'トリッカル 非公式ファンゲーム'),
       h('h1', {}, h('span', { class: 'l1' }, 'おばけの国の'), h('span', { class: 'l2' }, 'おかしキャッチ')),
     ),
-    h('div', { class: 'title-stage' }, cast, spiki),
-    h('div', { class: 'menu-buttons' }, btn('あそぶ', on.start, s, 'primary big'), h('div', { class: 'row' }, btn('あそびかた', on.howTo, s), btn('せってい', on.settings, s))),
+    h('div', { class: 'title-stage' }, row),
     h(
       'div',
-      { class: 'badge' },
-      t ? h('b', {}, `称号「${TITLE_TEXT[t]}」`) : null,
+      { class: 'menu-buttons' },
+      btn('あそぶ', on.start, s, 'primary big'),
+      h('div', { class: 'row' }, btn('あそびかた', on.howTo, s), btn('きろく', on.records, s), btn('せってい', on.settings, s)),
+    ),
+    // 称号は押すと「きろく」で一覧が見られる
+    h(
+      'button',
+      {
+        class: 'badge',
+        type: 'button',
+        onclick: () => {
+          s.click();
+          on.records();
+        },
+      },
+      h('b', {}, t ? `称号「${TITLE_TEXT[t]}」` : '称号 まだなし'),
       h('span', {}, `今までのおかし ${num(total)} こ`),
       next ? h('small', {}, `つぎの称号まで あと ${num(next.min - total)} こ`) : null,
     ),
@@ -72,22 +100,31 @@ export function titleScreen(host: MenuHost, on: { start: () => void; howTo: () =
   );
 }
 
+/** まだ取っていない称号のうち、いちばん近いもの */
+function nextTitle(total: number): (typeof TITLES)[number] | undefined {
+  return [...TITLES].reverse().find((x) => x.min > total);
+}
+
 // ===================================================================== キャラえらび
 
 export function charSelect(host: MenuHost, on: { pick: (id: CharId) => void; back: () => void }): HTMLElement {
   const s = host.sound;
   let chosen: CharId = host.save.lastChar;
-  const detail = h('div', { class: 'detail' });
+  // 5 人分の説明を同じ場所に重ねて、えらんだ人だけ見せる（説明の長さでボタンの位置が動かない）
+  const details = h('div', { class: 'details' });
+  const detailEls = new Map<CharId, HTMLElement>();
   const cards = h('div', { class: 'cards' });
   const cardEls = new Map<CharId, HTMLElement>();
 
-  const showDetail = () => {
-    const id = chosen;
+  const detailOf = (id: CharId) => {
     const d = CHARACTERS[id];
     const tx = CHAR_TEXT[id];
     const best = host.save.best[id];
-    detail.replaceChildren(
-      h('div', { class: 'detail-name', style: `--c:${C[id]}` }, h('small', {}, tx.costume), tx.name),
+    return h(
+      'div',
+      { class: 'detail', style: `--c:${C[id]}` },
+      h('div', { class: 'detail-face' }, mochiChibi(CHAR_SPECS[id], 'happy', 30, { sound: s })),
+      h('div', { class: 'detail-name' }, h('small', {}, tx.costume), tx.name),
       h('p', { class: 'hello' }, `「${tx.hello}」`),
       h(
         'div',
@@ -99,7 +136,10 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId) => void; bac
       h('p', { class: 'ability' }, tx.ability),
       h('p', { class: 'best-line' }, 'ベスト ', h('b', {}, best ? num(best) : '−'), ' ', rankBadge(host.save.rank[id], 'small')),
     );
-    for (const [cid, el] of cardEls) el.classList.toggle('on', cid === id);
+  };
+  const showDetail = () => {
+    for (const [cid, el] of detailEls) el.classList.toggle('on', cid === chosen);
+    for (const [cid, el] of cardEls) el.classList.toggle('on', cid === chosen);
   };
 
   for (const id of CHAR_ORDER) {
@@ -127,6 +167,9 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId) => void; bac
     );
     cardEls.set(id, card);
     cards.append(card);
+    const detail = detailOf(id);
+    detailEls.set(id, detail);
+    details.append(detail);
   }
   const start = () => {
     host.save.lastChar = chosen;
@@ -139,8 +182,64 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId) => void; bac
     { class: 'panel select' },
     h('h2', {}, 'だれで あそぶ？'),
     cards,
-    detail,
+    details,
     h('div', { class: 'row' }, btn('もどる', on.back, s), btn('スタート!', start, s, 'primary')),
+  );
+}
+
+// ===================================================================== きろく
+
+export function recordsPanel(host: MenuHost, on: { close: () => void }): HTMLElement {
+  const s = host.sound;
+  const save = host.save;
+  const total = save.sweets;
+  const t = titleOf(total);
+  const next = nextTitle(total);
+  // つぎの称号までの進み具合（ひとつ前の称号から数える）
+  const from = [...TITLES].find((x) => x.min <= total)?.min ?? 0;
+  const ratio = next ? (total - from) / (next.min - from) : 1;
+  return h(
+    'div',
+    { class: 'panel records' },
+    h('h2', {}, 'きろく'),
+    h(
+      'div',
+      { class: 'rec-title' },
+      h('small', {}, 'いまの称号'),
+      h('b', {}, t ? `「${TITLE_TEXT[t]}」` : 'まだなし'),
+      h('div', { class: 'meter' }, h('span', { style: `width:${Math.round(ratio * 100)}%` })),
+      h('p', {}, `今までのおかし ${num(total)} こ`, next ? h('small', {}, ` ・ つぎの称号まで あと ${num(next.min - total)} こ`) : null),
+      h('p', {}, h('small', {}, `あそんだ回数 ${num(save.plays)} 回`)),
+    ),
+    h(
+      'ul',
+      { class: 'rec-titles' },
+      ...[...TITLES].reverse().map((x) =>
+        h(
+          'li',
+          { class: total >= x.min ? 'got' : '' },
+          h('b', {}, TITLE_TEXT[x.id]),
+          h('small', {}, `おかし ${num(x.min)} こ`),
+          h('span', { class: 'state' }, total >= x.min ? 'ゲット!' : `あと ${num(x.min - total)} こ`),
+        ),
+      ),
+    ),
+    h('p', { class: 'rec-note' }, 'おかしは あそぶたびに たまっていきます'),
+    h(
+      'div',
+      { class: 'rec-chars' },
+      ...CHAR_ORDER.map((id) =>
+        h(
+          'div',
+          { class: 'rec-char', style: `--c:${C[id]}` },
+          mochiChibi(CHAR_SPECS[id], save.best[id] ? 'smile' : 'normal', 18, { sound: s, body: false }),
+          h('span', { class: 'card-name' }, CHAR_TEXT[id].name),
+          h('b', {}, save.best[id] ? num(save.best[id]) : '−'),
+          rankBadge(save.rank[id], 'small'),
+        ),
+      ),
+    ),
+    h('div', { class: 'row' }, btn('とじる', on.close, s, 'primary')),
   );
 }
 
@@ -264,7 +363,7 @@ export function resultPanel(host: MenuHost, info: ResultInfo, on: { retry: () =>
   const sweets = caught('candy') + caught('star') + caught('mokaron') + caught('shucaron');
   const before = titleOf(info.prevSweets);
   const after = titleOf(info.prevSweets + sweets);
-  const next = [...TITLES].reverse().find((x) => x.min > info.prevSweets + sweets);
+  const next = nextTitle(info.prevSweets + sweets);
   const nextRank = [...RANKS].reverse().find((r) => r.min > score);
 
   const scoreEl = h('div', { class: 'score' }, '0');

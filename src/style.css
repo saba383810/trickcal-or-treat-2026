@@ -238,12 +238,20 @@ canvas.pic {
   pointer-events: none;
 }
 
-/* 絵はステッカーのように白フチ */
+/* 背景の上に立つ絵は、足もとに影だけ */
 .title-stage canvas.chibi,
 .result-face canvas.chibi,
 .tip-face canvas.chibi {
-  filter: drop-shadow(2px 0 0 #fff) drop-shadow(-2px 0 0 #fff) drop-shadow(0 2px 0 #fff) drop-shadow(0 -2px 0 #fff)
-    drop-shadow(0 4px 3px rgba(20, 10, 40, 0.35));
+  filter: drop-shadow(0 4px 3px rgba(20, 10, 40, 0.35));
+}
+
+/* 頭の半径 --u（キャラごとの倍率 --k）で大きさを決めて並べる所。--wu・--hu は絵の幅・高さ（頭の半径を 1 として） */
+.title-cast canvas.chibi:not(.mochi-over),
+.cards canvas.chibi:not(.mochi-over),
+.detail-face canvas.chibi:not(.mochi-over),
+.rec-chars canvas.chibi:not(.mochi-over) {
+  width: calc(var(--u) * var(--k, 1) * var(--wu)) !important;
+  height: calc(var(--u) * var(--k, 1) * var(--hu)) !important;
 }
 
 /* ------------------------------------------------------------------ タイトル */
@@ -301,21 +309,24 @@ canvas.pic {
 }
 
 .title-stage {
-  position: relative;
-  display: flex;
-  gap: 4px;
-  align-items: flex-end;
-  justify-content: center;
+  container-type: inline-size;
+  width: 100%;
 }
 
+/* 6 人の並びが画面の幅（と高さ）におさまる頭の大きさ */
 .title-cast {
+  --u: min(34px, 100cqw / 15.8, 5.4svh);
   display: flex;
   align-items: flex-end;
   justify-content: center;
 }
 
 .title-cast .mochi {
-  margin: 0 -10px;
+  margin: 0 calc(var(--u) * -0.4);
+}
+
+.title-cast .mochi.lead {
+  z-index: 1;
 }
 
 .title-cast .mochi:nth-child(odd) {
@@ -330,10 +341,6 @@ canvas.pic {
   50% {
     transform: translateY(-6px);
   }
-}
-
-.title-spiki {
-  margin-left: 6px;
 }
 
 .menu-buttons {
@@ -354,10 +361,17 @@ canvas.pic {
   align-items: baseline;
   justify-content: center;
   padding: 6px 16px;
+  font: inherit;
   font-size: 14px;
   color: #fff;
+  cursor: pointer;
   background: rgba(40, 20, 70, 0.75);
+  border: 2px solid rgba(255, 255, 255, 0.35);
   border-radius: 14px;
+}
+
+.badge:hover {
+  background: rgba(60, 30, 100, 0.85);
 }
 
 .badge b {
@@ -380,10 +394,15 @@ canvas.pic {
   width: min(760px, 100%);
 }
 
+/* カードの中に絵がおさまる頭の大きさ（いちばん幅の広い絵で決めて、5 人とも同じ大きさ） */
 .cards {
+  --cols: 5;
+  --gap: 8px;
+  --u: min(30px, ((100cqw - (var(--cols) - 1) * var(--gap)) / var(--cols) - 12px) / 3.8);
+  container-type: inline-size;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(var(--cols), 1fr);
+  gap: var(--gap);
 }
 
 .card {
@@ -391,7 +410,9 @@ canvas.pic {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 6px 2px 8px;
+  justify-content: flex-end;
+  min-width: 0;
+  padding: 6px 3px 8px;
   font: inherit;
   color: var(--ink);
   cursor: pointer;
@@ -410,9 +431,6 @@ canvas.pic {
   transform: translateY(-4px);
 }
 
-.card .mochi {
-  margin: -6px -18px 0;
-}
 
 .card-name {
   display: flex;
@@ -427,22 +445,42 @@ canvas.pic {
   color: var(--ink-soft);
 }
 
+/* ランクは絵にかぶらないよう、カードの角に */
 .card .rank {
   position: absolute;
-  top: 4px;
-  right: 4px;
+  top: -8px;
+  right: -8px;
+}
+
+/* 5 人分を重ねて置き、いちばん長い説明の高さにそろえる */
+.details {
+  display: grid;
+  margin-top: 14px;
+}
+
+.details > .detail {
+  grid-area: 1 / 1;
+}
+
+.details > .detail:not(.on) {
+  visibility: hidden;
 }
 
 .detail {
+  --u: 26px;
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 6px 16px;
+  gap: 4px 14px;
   align-items: center;
-  margin-top: 14px;
   padding: 12px 16px;
   background: rgba(255, 255, 255, 0.85);
   border: 2px dashed #cdb9e6;
   border-radius: 16px;
+}
+
+.detail-face {
+  grid-row: span 3;
+  align-self: end;
 }
 
 .detail-name {
@@ -496,6 +534,7 @@ canvas.pic {
 }
 
 .ability {
+  grid-column: 1 / -1;
   font-size: 14px;
   line-height: 1.5;
 }
@@ -813,6 +852,134 @@ canvas.pic {
   color: var(--orange-deep);
 }
 
+/* ------------------------------------------------------------------ きろく */
+
+.rec-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  padding: 10px 14px 12px;
+  text-align: center;
+  background: rgba(40, 20, 70, 0.85);
+  border-radius: 16px;
+  color: #fff;
+}
+
+.rec-title > small {
+  font-size: 12px;
+  color: #d9cdf0;
+}
+
+.rec-title > b {
+  font-size: 22px;
+  color: var(--gold);
+}
+
+.rec-title p {
+  font-size: 13px;
+}
+
+.rec-title p small {
+  color: #d9cdf0;
+}
+
+.meter {
+  width: min(280px, 90%);
+  height: 10px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 5px;
+}
+
+.meter span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #ffd36b, var(--orange));
+  border-radius: 5px;
+}
+
+.rec-titles {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rec-titles li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 10px;
+  align-items: center;
+  padding: 6px 12px;
+  font-size: 14px;
+  color: var(--ink-soft);
+  background: rgba(255, 255, 255, 0.6);
+  border: 2px dashed #d9cce8;
+  border-radius: 12px;
+}
+
+.rec-titles li.got {
+  color: var(--ink);
+  background: #fff6dc;
+  border: 2px solid var(--gold);
+}
+
+.rec-titles small {
+  grid-row: 2;
+  font-size: 12px;
+}
+
+.rec-titles .state {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  font-size: 12px;
+  text-align: right;
+}
+
+.rec-titles li.got .state {
+  font-weight: 800;
+  color: var(--orange-deep);
+}
+
+.rec-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+.rec-chars {
+  --u: min(18px, ((100cqw - 4 * 6px) / 5 - 8px) / 3.8);
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.rec-char {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  padding: 4px 2px 6px;
+  font-size: 13px;
+  background: #fff;
+  border: 2px solid color-mix(in srgb, var(--c) 60%, #fff);
+  border-radius: 12px;
+}
+
+.rec-char b {
+  font-family: var(--pop);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1;
+}
+
 /* ------------------------------------------------------------------ 小さい画面 */
 
 @media (max-width: 560px) {
@@ -820,22 +987,42 @@ canvas.pic {
     padding: 18px 12px 14px;
   }
 
+  /* スマホではカードを小さく 1 列に（えらんだ人は下の説明に大きく出る） */
   .cards {
-    grid-template-columns: repeat(5, 1fr);
-    gap: 4px;
+    --gap: 4px;
+    --u: min(30px, ((100cqw - 4 * var(--gap)) / 5 - 6px) / 3.8);
   }
 
-  .card .mochi {
-    margin: -6px -24px 0;
+  .card {
+    padding: 4px 1px 6px;
+    border-width: 2px;
+    border-radius: 12px;
   }
 
   .card-name {
-    font-size: 12px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .card-name small {
+    display: none;
+  }
+
+  .card .rank {
+    top: -6px;
+    right: -6px;
   }
 
   .detail {
-    grid-template-columns: 1fr;
+    --u: 22px;
+    padding: 10px 12px;
   }
+
+  .menu-buttons .row .btn {
+    padding: 8px 14px;
+    font-size: 16px;
+  }
+
 
   .btn.big {
     min-width: 200px;
