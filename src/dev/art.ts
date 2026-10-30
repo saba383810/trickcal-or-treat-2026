@@ -92,14 +92,14 @@ function draw(): void {
   // 降ってくるお菓子と、地面に並べたお菓子
   [...ART.items, ...ART.floor].forEach(([kind, x, y, r], i) => drawItem(c, kind, x, y, r, { t: 0.4, phase: i * 1.3, id: i }));
 
-  // 5 人
-  const exprs: Expr[] = ['munch', 'happy', 'happy', 'smile', 'happy'];
-  const ids = ['kommy', 'elfin', 'butter', 'yomi', 'joanne'] as const;
+  // 5 人（タイトルと同じく、まん中にバターとコミーが向かい合う）
+  const exprs: Expr[] = ['smile', 'happy', 'happy', 'munch', 'happy'];
+  const ids = ['yomi', 'elfin', 'butter', 'kommy', 'joanne'] as const;
   const r = ART.charR;
   ids.forEach((id, i) => {
     const x = ART.charX[i];
     const lift = i % 2 ? 6 * k : 0;
-    drawChibi(c, CHAR_SPECS[id], x, ground - FEET_R * r - lift, r, { expr: exprs[i], t: 0.4, turn: i < 2 ? 1 : -1, prop: true, tilt: (i - 2) * 0.04 });
+    drawChibi(c, CHAR_SPECS[id], x, ground - FEET_R * r - lift, r, { expr: exprs[i], t: 0.4, turn: i < 3 ? 1 : -1, prop: true, tilt: (i - 2) * 0.04 });
   });
 
   // タイトル
