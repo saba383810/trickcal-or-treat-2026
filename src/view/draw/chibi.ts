@@ -1,0 +1,3231 @@
+// SD キャラをコードで描く。頭の半径 50 の座標系でデザインし、描画時に拡縮する。
+// 原作の画風（横に広いもち顔・低い位置の大きな目・赤茶の線・低彩度のパステル塗り）に寄せた
+// 描き起こし。公式イラストの模写・トレースではなく、設定資料の特徴から起こしたオリジナル。
+
+/** straight = 床まで届くまっすぐな髪（しゃがむと床に広がる） */
+export type HairStyle = 'long' | 'wavy' | 'bob' | 'twin' | 'pony' | 'short' | 'bun' | 'straight';
+/** heavy = 目まで隠れる重い前髪（モブ）、hime = 目のすぐ上でまっすぐ切りそろえた前髪 */
+export type BangStyle = 'blunt' | 'swept' | 'split' | 'heavy' | 'hime';
+/**
+ * bowband = リボン付きのカチューシャ。以下はハロウィンの仮装: witch = 魔女の帽子、skull = 頭の横のドクロ、
+ * bandage = 頭に巻いた包帯とリボン、headband = 細いカチューシャ、batWings = 頭の左右のこうもりの羽の飾り
+ */
+export type HatKind = 'beret' | 'tiara' | 'veil' | 'ribbon' | 'leaf' | 'maid' | 'bowband' | 'witch' | 'skull' | 'bandage' | 'headband' | 'batWings' | null;
+export type WingKind = 'plain' | 'pink' | 'frost' | 'swirl' | null;
+/** cat = ω の口、o = 小さく丸く開けた口 */
+export type MouthKind = 'line' | 'fang' | 'open' | 'smirk' | 'cat' | 'o';
+export type Expr =
+  | 'normal'
+  | 'happy'
+  | 'smile'
+  | 'angry'
+  | 'worried'
+  | 'munch'
+  | 'surprised'
+  | 'sulk'
+  | 'dizzy'
+  | 'stern'
+  | 'sleep'
+  /** ほっぺを引っぱられている顔（ぎゅっとつぶった「> <」の目と、わめいて開いた口） */
+  | 'pinched';
+
+export interface ChibiSpec {
+  skin: string;
+  hair: string;
+  hairShade: string;
+  /** 毛先の色（後ろ髪のグラデーションの終点） */
+  hairTip: string;
+  /** 頭のつやの色 */
+  shine: string;
+  /** ふだんから半目（ジト目） */
+  halfLid?: boolean;
+  /** 眉の色（怒り・困り顔のときだけ出る） */
+  brows?: string;
+  mouth: MouthKind;
+  style: HairStyle;
+  bangs: BangStyle;
+  outfit: string;
+  outfitShade: string;
+  collar: string;
+  legs: string;
+  shoes: string;
+  ears: 'elf' | 'cat' | 'dog' | null;
+  /** しっぽ（tip = 先の色） */
+  tail?: { kind: 'cat' | 'dog'; color: string; tip: string };
+  /** 頭のてっぺんのアホ毛 */
+  ahoge?: boolean;
+  hat: HatKind;
+  hatColor: string;
+  wings: WingKind;
+  /**
+   * キャラ固有の服・小物。kommyReaper〜joanneVampire はハロウィンの仮装（死神・魔女・ミイラ・おばけ・吸血鬼）、
+   * spikey は立っているスピッキー（泣くとしゃがみこんだ speaki になる）
+   */
+  extra?: 'eshur' | 'elfin' | 'nell' | 'komi' | 'butter' | 'speaki' | 'kommyReaper' | 'elfinWitch' | 'butterMummy' | 'yomiGhost' | 'joanneVampire' | 'spikey';
+  /** 瞳の色（下へ行くほどこの色になるグラデーションと白い光）。省略すると原作の SD の焦げ茶一色 */
+  eyeColor?: string;
+  /** 瞳に白い星のきらめき */
+  starEyes?: boolean;
+  /** しゃがんだ姿（足の裏が CROUCH_FEET_R の高さになる） */
+  crouch?: boolean;
+  /** 名前のないモブ（目は前髪で隠れ、口と頬で表情を出す） */
+  mob?: boolean;
+  /** モブのエプロンの色 */
+  apron?: string;
+}
+
+export interface ChibiPose {
+  expr: Expr;
+  /** アニメーション用の経過秒 */
+  t: number;
+  blink?: boolean;
+  /** 体の上下の伸び縮み（1 = そのまま） */
+  squash?: number;
+  tilt?: number;
+  /** 左右のほっぺのぷるぷる（バネのずれ） */
+  wobble?: number;
+  /** 体を描くか（false なら顔だけ） */
+  body?: boolean;
+  /** 持ち物（王笏・斧・指示棒）を持たせる */
+  prop?: boolean;
+  /** 顔を向ける側（そちらのほっぺが輪郭の外へもちっと張り出す）。既定 1 */
+  turn?: -1 | 1;
+  /** 髪の横揺れ（頭の単位。頭のてっぺんから 100 下の毛先が横へずれる量） */
+  sway?: number;
+  /** 線の太さの倍率。省略すると画面に出る大きさから決める（lineScale）。引っぱった顔を別のキャンバスに拡大して描く時は、ふだんと同じ値を渡す */
+  lineK?: number;
+  /** 顔の輪郭の線を引かない（引っぱった顔は、伸びた形のまわりにあとから線を引く） */
+  bare?: boolean;
+}
+
+/**
+ * drawChibi で描く層（ビットの組み合わせ）。下から back（体・後ろ髪・横の髪）、face（輪郭・ほっぺ・目・口）、
+ * front（前髪・眉・帽子・持ち物）。ほっぺを引っぱる間は face だけを変形し、髪や体はそのまま上下に重ねる
+ */
+export const LAYER = { back: 1, face: 2, front: 4, all: 7 } as const;
+
+/** ほっぺ（頬紅）の中心。目の少し外・目の下端より下で、口と同じ高さ。頭半径 50 の単位 */
+const CHEEK = { x: 32, y: 28 };
+/** 目の中心（右目。左目は x を反転）と大きさ */
+const EYE_POS = { x: 19, y: 14, rx: 4.8, ry: 8.4 };
+/** 足の裏の高さ（頭の半径に対する倍率） */
+export const FEET_R = 2.34;
+/** しゃがんだ時の足の裏の高さ */
+export const CROUCH_FEET_R = 2.08;
+/** しゃがんだ時の床の y（頭半径 50 の単位） */
+const FLOOR = CROUCH_FEET_R * 50;
+
+/** そのキャラの足の裏の高さ（頭の半径に対する倍率） */
+export function feetR(s: ChibiSpec): number {
+  return s.crouch ? CROUCH_FEET_R : FEET_R;
+}
+
+export const LINE = '#5a2d32';
+/** 顔の輪郭の線の、外に見えている幅（頭の単位） */
+export const FACE_LINE = 2.6;
+const BLUSH = 'rgba(255, 166, 164, 0.95)';
+/** 原作の SD の目の色（焦げ茶） */
+export const EYE = '#55242a';
+const MOUTH = '#b23a48';
+const TONGUE = '#fda3a2';
+const WHITE = '#fffdfb';
+const GOLD = '#fdd397';
+const GOLD_SHADE = '#e3a46f';
+const PUMPKIN = '#f3a25f';
+const PUMPKIN_SHADE = '#dc8546';
+const LAVENDER = '#cbbfcd';
+const LAVENDER_SHADE = '#ab9db0';
+const LACE = '#f7f2f7';
+/** スピキの頭巾の上側の色（下は hatColor） */
+const VEIL_TOP = '#5b5272';
+
+/**
+ * 原作のクレヨン（色鉛筆）のような線: 線の色に、ところどころ薄くかすれた粒を混ぜた模様で引く。
+ * 模様は頭の単位で 0.5 ごとの粒（キャラと一緒に拡大縮小する）。描く前に setGrain で粒の大きさを決める
+ */
+const GRAIN = 0.5;
+/** 粒は画面の画素で少なくともこの大きさ（小さく描いた時に粒が潰れて、線が薄く見えないように） */
+const GRAIN_MIN_PX = 1.2;
+/**
+ * WebKit（iPhone・iPad の Safari）は、模様で線を引いたあと色で線を引き、また同じ模様を strokeStyle に入れると、
+ * 模様を無視して前の色のまま線を引く（コミーの輪郭が髪の影のピンクになる。塗りは平気）。
+ * そこで同じ色の模様を何枚か作っておき、crayon を呼ぶたびに次の 1 枚を返す
+ */
+const GRAIN_POOL = 6;
+const grains = new Map<string, { pats: CanvasPattern[]; scale: number[]; next: number }>();
+/** いまの粒の大きさ（頭の単位） */
+let grain = GRAIN;
+const ink = () => crayon(LINE);
+const eyeInk = () => crayon(EYE);
+
+/**
+ * 線の太さの倍率。線は頭の単位で決めてあるので、そのままだと小さく描いたキャラほど線が細く薄くなり、
+ * 同じ画面に大きさの違うキャラが並ぶと線の濃さがばらつく。画面での頭の半径が LINE_R より小さいほど線を太らせる
+ * （輪郭・目・口などの線だけ。髪の筋や縁取りのような形の一部は太らせない）
+ */
+let lineK = 1;
+const LINE_R = 46;
+const LINE_K_MAX = 2;
+
+/** 頭の半径 r（ctx の単位）のキャラを描く時の線の太さの倍率。画面での大きさ（CSS の px）で決める */
+export function lineScale(ctx: CanvasRenderingContext2D, r: number): number {
+  const m = ctx.getTransform();
+  const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+  const css = (r * Math.hypot(m.a, m.b)) / dpr;
+  if (!(css > 0)) return 1;
+  return Math.min(LINE_K_MAX, Math.max(1, Math.pow(LINE_R / css, 0.6)));
+}
+
+/** クレヨンの粒の大きさを、いまの ctx（頭の単位）で画面の画素 GRAIN_MIN_PX より小さくならないようにそろえる */
+export function setGrain(ctx: CanvasRenderingContext2D): void {
+  const m = ctx.getTransform();
+  const px = Math.hypot(m.a, m.b);
+  grain = Math.max(GRAIN, px > 0 ? GRAIN_MIN_PX / px : GRAIN);
+}
+
+/** color のクレヨンの模様（線を引くたびに呼ぶ。上の WebKit 対策で、呼ぶたびに別の 1 枚になる） */
+export function crayon(color: string): string | CanvasPattern {
+  let pool = grains.get(color);
+  if (!pool) {
+    if (typeof document === 'undefined') return color;
+    const pats = grainPatterns(color);
+    if (!pats) return color;
+    pool = { pats, scale: pats.map(() => 0), next: 0 };
+    grains.set(color, pool);
+  }
+  const i = pool.next;
+  pool.next = (i + 1) % pool.pats.length;
+  const pat = pool.pats[i];
+  if (pool.scale[i] !== grain) {
+    pat.setTransform(new DOMMatrix().scale(grain));
+    pool.scale[i] = grain;
+  }
+  return pat;
+}
+
+function grainPatterns(color: string): CanvasPattern[] | null {
+  const n = 64;
+  const cv = document.createElement('canvas');
+  cv.width = n;
+  cv.height = n;
+  const c = cv.getContext('2d');
+  if (!c) return null;
+  // 粒の濃さ: ばらばらの乱数を隣とならして小さなかたまりにし、ところどころ大きく抜く
+  let seed = 20231;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const raw = Array.from({ length: n * n }, rnd);
+  const img = c.createImageData(n, n);
+  const r = parseInt(color.slice(1, 3), 16);
+  const g = parseInt(color.slice(3, 5), 16);
+  const b = parseInt(color.slice(5, 7), 16);
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const at = (dx: number, dy: number) => raw[((y + dy + n) % n) * n + ((x + dx + n) % n)];
+      const v = (at(0, 0) * 2 + at(1, 0) + at(0, 1) + at(-1, 0) + at(0, -1)) / 6;
+      const a = v < 0.25 ? 0.58 : v < 0.38 ? 0.84 : 1;
+      img.data.set([r, g, b, Math.round(a * 255)], (y * n + x) * 4);
+    }
+  }
+  c.putImageData(img, 0, 0);
+  const pats: CanvasPattern[] = [];
+  for (let i = 0; i < GRAIN_POOL; i++) {
+    const pat = c.createPattern(cv, 'repeat');
+    if (!pat) return null;
+    pats.push(pat);
+  }
+  return pats;
+}
+
+export function drawChibi(
+  ctx: CanvasRenderingContext2D,
+  spec: ChibiSpec,
+  x: number,
+  y: number,
+  r: number,
+  pose: ChibiPose,
+  layers: number = LAYER.all,
+): void {
+  const k = r / 50;
+  const squash = pose.squash ?? 1;
+  const body = pose.body !== false;
+  const sway = pose.sway ?? 0;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(pose.tilt ?? 0);
+  lineK = pose.lineK ?? lineScale(ctx, r);
+  ctx.scale(k * (2 - squash), k * squash);
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  const g = faceGeom(spec, pose);
+  setGrain(ctx);
+
+  if (layers & LAYER.back) {
+    if (body && spec.wings) wings(ctx, spec.wings);
+    if (body && spec.tail) tail(ctx, spec.tail);
+    // 顔だけの時は、肩から下に垂れる髪やヴェールを切る
+    ctx.save();
+    if (!body) {
+      ctx.beginPath();
+      ctx.rect(-140, -140, 280, 196);
+      ctx.clip();
+    }
+    // 揺れは毛先ほど・ほっぺに近い髪ほど大きく、頭にくっついた後ろ髪やヴェールは控えめ
+    if (spec.extra === 'yomiGhost') yomiHalo(ctx);
+    if (spec.hat === 'veil') swayed(ctx, sway * SWAY.veil, -60, () => veilBack(ctx, spec));
+    swayed(ctx, sway * SWAY.back, -40, () => backHair(ctx, spec));
+    if (spec.style === 'twin' || spec.style === 'pony') bent(ctx, sway * SWAY.tails, -40, () => hairTails(ctx, spec));
+    ctx.restore();
+    // マントは肩から羽織るので、後ろ髪より手前・体より奥（髪はマントの外側からのぞく）
+    if (body && spec.extra === 'elfin') royalCape(ctx);
+    if (body && spec.extra === 'joanneVampire') vampireCape(ctx);
+    if (body) drawBody(ctx, spec, pose);
+    if (spec.ears === 'elf') elfEars(ctx, spec);
+    // 横の髪は顔より奥（ほっぺが髪の手前に出る）
+    sideHair(ctx, spec, body, sway);
+  }
+
+  // スピキの涙のたまった大きな目は下がほっぺにかかり、引っぱると一緒に伸びてしまうので、その間は変形しない手前の層に描く
+  const frontEyes = pose.expr === 'pinched' && spec.extra === 'speaki';
+  if (layers & LAYER.face) {
+    face(ctx, spec, g, sway, pose.bare === true);
+    cheekBulge(ctx, spec, g, pose.bare === true);
+    // 顔を向けた側へ目と口を少しずらす（3/4 向き）
+    ctx.save();
+    ctx.translate(g.turn * 3, 0);
+    if (!frontEyes) eyes(ctx, spec, pose);
+    mouth(ctx, spec, pose);
+    ctx.restore();
+  }
+
+  if (layers & LAYER.front) {
+    if (frontEyes) {
+      ctx.save();
+      ctx.translate(g.turn * 3, 0);
+      eyes(ctx, spec, pose);
+      ctx.restore();
+    }
+    swayed(ctx, sway * BANG_SWAY, BANG_TOP, () => bangs(ctx, spec));
+    ctx.save();
+    ctx.translate(g.turn * 3, 0);
+    brows(ctx, spec, pose.expr);
+    // 涙は伸びるほっぺにかかるので、変形しない手前の層に描く
+    // スピキは目に涙がたまっているので足さない
+    if (pose.expr === 'pinched' && !spec.mob && spec.extra !== 'speaki') for (const side of [-1, 1]) tear(ctx, side * EYE_POS.x, EYE_POS.y, side);
+    ctx.restore();
+    if (spec.ears === 'cat') catEars(ctx, spec);
+    if (spec.ahoge) ahoge(ctx, spec, sway);
+    hat(ctx, spec);
+    if (body && pose.prop) prop(ctx, spec);
+    if (pose.expr === 'angry') angerMark(ctx, pose.t);
+    if (pose.expr === 'worried' && spec.extra !== 'speaki') sweat(ctx);
+    if (spec.mob && pose.expr === 'happy') heart(ctx, -g.turn * 50, -56 - Math.abs(Math.sin(pose.t * 5)) * 4);
+  }
+  ctx.restore();
+}
+
+/** 前髪の根もと（頭のてっぺん）と、毛先の揺れに対する前髪の揺れの割合（前髪は短いので少しだけ） */
+const BANG_TOP = -73;
+const BANG_SWAY = 0.15;
+/**
+ * 髪の部分ごとの揺れの割合（pose.sway に掛ける）。ほっぺの横に垂れる髪（触覚）・三つ編み・垂れ耳・
+ * ツインテールは毛先ほど大きくしなり、頭にくっついた後ろ髪とヴェールは少しだけ
+ */
+const SWAY = { back: 0.35, veil: 0.3, side: 1.7, dogEars: 1.3, tails: 1.2, ahoge: 0.045 };
+
+/**
+ * 髪を揺らして描く。y = pivot の高さは動かさず、下へ行くほど横へずらす（毛先ほど大きく揺れる）。
+ * sway は pivot から 100 下でのずれ
+ */
+function swayed(ctx: CanvasRenderingContext2D, sway: number, pivot: number, draw: () => void): void {
+  if (!sway) {
+    draw();
+    return;
+  }
+  const c = sway / 100;
+  ctx.save();
+  ctx.transform(1, 0, c, 1, -c * pivot, 0);
+  draw();
+  ctx.restore();
+}
+
+/**
+ * 髪をしならせて描く。y = pivot より上は動かさず、下へ行くほど (距離 / 100)² に比例して横へずらす
+ * （根もとはほとんど動かず、毛先ほど大きく揺れる）。sway は pivot から 100 下でのずれ。
+ * 横の帯に分けて、帯ごとに前後の帯とつながる傾きで描く
+ */
+function bent(ctx: CanvasRenderingContext2D, sway: number, pivot: number, draw: () => void, len = 120): void {
+  if (!sway) {
+    draw();
+    return;
+  }
+  const n = 6;
+  const off = (y: number) => {
+    const t = Math.max(0, y - pivot) / 100;
+    return sway * t * t;
+  };
+  for (let i = -1; i < n; i++) {
+    const y0 = i < 0 ? -1000 : pivot + (len * i) / n;
+    const y1 = i < 0 ? pivot : i === n - 1 ? 1000 : pivot + (len * (i + 1)) / n;
+    ctx.save();
+    ctx.beginPath();
+    // 帯の境目に継ぎ目が出ないよう少し重ねる
+    ctx.rect(-1000, y0 - 0.3, 2000, y1 - y0 + 0.6);
+    ctx.clip();
+    if (i >= 0) {
+      const a = pivot + (len * i) / n;
+      const b = pivot + (len * (i + 1)) / n;
+      const k = (off(b) - off(a)) / (b - a);
+      ctx.transform(1, 0, k, 1, off(a) - k * a, 0);
+    }
+    draw();
+    ctx.restore();
+  }
+}
+
+// ------------------------------------------------------------------ helpers
+
+function vgrad(ctx: CanvasRenderingContext2D, y0: number, y1: number, stops: string[]): CanvasGradient {
+  const g = ctx.createLinearGradient(0, y0, 0, y1);
+  stops.forEach((c, i) => g.addColorStop(i / (stops.length - 1), c));
+  return g;
+}
+
+/** 左右で塗り分ける 1 段影（アニメ塗り） */
+function sideShade(ctx: CanvasRenderingContext2D, x0: number, x1: number, light: string, shade: string, at = 0.62): CanvasGradient {
+  const g = ctx.createLinearGradient(x0, 0, x1, 0);
+  g.addColorStop(0, light);
+  g.addColorStop(at, light);
+  g.addColorStop(Math.min(1, at + 0.01), shade);
+  g.addColorStop(1, shade);
+  return g;
+}
+
+function fillStroke(ctx: CanvasRenderingContext2D, fill: string | CanvasGradient, lw = 2.4, stroke: string | CanvasPattern = ink()): void {
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = lw * lineK;
+  ctx.stroke();
+}
+
+/** 線つきの太い筒（腕・柄など） */
+function tube(ctx: CanvasRenderingContext2D, pts: number[], w: number, color: string): void {
+  const path = () => {
+    ctx.beginPath();
+    ctx.moveTo(pts[0], pts[1]);
+    if (pts.length === 6) ctx.quadraticCurveTo(pts[2], pts[3], pts[4], pts[5]);
+    else ctx.lineTo(pts[2], pts[3]);
+  };
+  path();
+  ctx.strokeStyle = ink();
+  ctx.lineWidth = w + 4.6 * lineK;
+  ctx.stroke();
+  path();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = w;
+  ctx.stroke();
+}
+
+function dot(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, fill: string, lw = 2): void {
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  fillStroke(ctx, fill, lw);
+}
+
+function crystal(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string, rot = 0): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rot);
+  ctx.beginPath();
+  ctx.moveTo(0, -h);
+  ctx.lineTo(w, 0);
+  ctx.lineTo(0, h);
+  ctx.lineTo(-w, 0);
+  ctx.closePath();
+  fillStroke(ctx, color, 1.6);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+  ctx.beginPath();
+  ctx.moveTo(0, -h * 0.7);
+  ctx.lineTo(w * 0.45, -h * 0.1);
+  ctx.lineTo(0, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function spiral(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
+  ctx.beginPath();
+  for (let a = 0; a <= Math.PI * 3.2; a += 0.25) {
+    const rr = (size * a) / (Math.PI * 3.2);
+    ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  ctx.stroke();
+}
+
+// ------------------------------------------------------------------ wings / cape / veil
+
+function wings(ctx: CanvasRenderingContext2D, kind: Exclude<WingKind, null>): void {
+  const tint = kind === 'pink' ? '#f6d2dc' : kind === 'frost' ? '#d4f1fb' : kind === 'swirl' ? '#fbdbe3' : '#ece4ec';
+  for (const side of [-1, 1]) {
+    ctx.save();
+    ctx.translate(side * 28, 57);
+    ctx.scale(side, 1);
+    ctx.rotate(-0.3);
+    const p = new Path2D();
+    p.moveTo(0, 2);
+    p.bezierCurveTo(6, -20, 30, -32, 46, -24);
+    p.quadraticCurveTo(53, -16, 42, -11);
+    p.quadraticCurveTo(49, -2, 37, 1);
+    p.quadraticCurveTo(41, 10, 27, 10);
+    p.quadraticCurveTo(14, 14, 0, 2);
+    ctx.fillStyle = WHITE;
+    ctx.fill(p);
+    ctx.save();
+    ctx.clip(p);
+    ctx.fillStyle = tint;
+    ctx.beginPath();
+    ctx.ellipse(30, 9, 26, 10, -0.15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = ink();
+    ctx.lineWidth = 2.2 * lineK;
+    ctx.stroke(p);
+    ctx.lineWidth = 1.4 * lineK;
+    ctx.beginPath();
+    ctx.moveTo(20, -7);
+    ctx.quadraticCurveTo(30, -10, 39, -8);
+    ctx.moveTo(14, 2);
+    ctx.quadraticCurveTo(23, 3, 31, 2);
+    ctx.stroke();
+    if (kind === 'swirl') {
+      ctx.lineWidth = 1.6 * lineK;
+      spiral(ctx, 40, -19, 5);
+    }
+    ctx.restore();
+  }
+}
+
+/** エルフィンのマント（表はコーラル、裏はくすみピンク、裾に白いポンポン） */
+function royalCape(ctx: CanvasRenderingContext2D): void {
+  ctx.beginPath();
+  ctx.moveTo(-22, 44);
+  ctx.bezierCurveTo(-44, 60, -56, 92, -54, 112);
+  ctx.lineTo(54, 112);
+  ctx.bezierCurveTo(56, 92, 44, 60, 22, 44);
+  ctx.closePath();
+  fillStroke(ctx, '#ca7589');
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(side * 22, 44);
+    ctx.bezierCurveTo(side * 44, 60, side * 56, 92, side * 54, 112);
+    ctx.lineTo(side * 42, 112);
+    ctx.bezierCurveTo(side * 42, 88, side * 34, 62, side * 18, 46);
+    ctx.closePath();
+    fillStroke(ctx, '#ee8584');
+  }
+  for (let px = -48; px <= 48; px += 12) dot(ctx, px, 112, 5.5, WHITE, 1.8);
+}
+
+/** ネルのヴェールの後ろ側（頭の後ろから肩まで） */
+function veilBack(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  if (s.extra === 'speaki' || s.extra === 'spikey') {
+    speakiVeilBack(ctx, s);
+    return;
+  }
+  ctx.beginPath();
+  ctx.moveTo(-62, -52);
+  ctx.bezierCurveTo(-84, -12, -82, 40, -76, 78);
+  ctx.lineTo(76, 78);
+  ctx.bezierCurveTo(82, 40, 84, -12, 62, -52);
+  ctx.bezierCurveTo(40, -92, -40, -92, -62, -52);
+  ctx.closePath();
+  fillStroke(ctx, vgrad(ctx, -90, 80, ['#7d7893', s.hatColor]));
+  // 縁の帯
+  ctx.strokeStyle = '#4e3436';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(-77, 72);
+  ctx.lineTo(-60, 72);
+  ctx.moveTo(77, 72);
+  ctx.lineTo(60, 72);
+  ctx.stroke();
+}
+
+/** スピキの頭巾の後ろ側: 左へ流れて床まで届く。金の縁取りと星、裾に白いレース */
+function speakiVeilBack(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  const drape = new Path2D();
+  drape.moveTo(-62, -52);
+  drape.bezierCurveTo(-86, -24, -96, 36, -92, FLOOR);
+  drape.lineTo(64, FLOOR);
+  drape.bezierCurveTo(76, 40, 82, -12, 62, -52);
+  drape.bezierCurveTo(40, -92, -40, -92, -62, -52);
+  drape.closePath();
+  ctx.strokeStyle = ink();
+  ctx.lineWidth = 2.6 * lineK;
+  ctx.stroke(drape);
+  ctx.fillStyle = vgrad(ctx, -90, 90, [VEIL_TOP, s.hatColor]);
+  ctx.fill(drape);
+  ctx.save();
+  ctx.clip(drape);
+  ctx.strokeStyle = GOLD;
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.moveTo(-68, -44);
+  ctx.bezierCurveTo(-86, -14, -90, 40, -86, FLOOR);
+  ctx.stroke();
+  for (const [x, y] of [[-79, -12], [-82, 18], [-78, 44], [-84, 66], [-77, 86]]) star(ctx, x, y, 2.8, GOLD);
+  ctx.restore();
+  for (let x = -89; x <= -66; x += 5.8) dot(ctx, x, FLOOR - 1, 2.8, LACE, 1.3);
+}
+
+/** 星（lw = 0 なら線なし） */
+function star(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, fill: string, lw = 0): void {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const l = i % 2 ? r * 0.48 : r;
+    ctx.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l);
+  }
+  ctx.closePath();
+  if (lw) fillStroke(ctx, fill, lw);
+  else {
+    ctx.fillStyle = fill;
+    ctx.fill();
+  }
+}
+
+// ------------------------------------------------------------------ hair
+
+function backHair(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  ctx.beginPath();
+  let bottom = 60;
+  switch (s.style) {
+    case 'long':
+      bottom = 110;
+      ctx.moveTo(-58, -34);
+      ctx.bezierCurveTo(-76, 6, -76, 64, -70, 106);
+      for (const [x, y] of [[-58, 100], [-48, 110], [-34, 102], [-18, 109], [0, 103], [18, 109], [34, 102], [48, 110], [58, 100], [70, 106]]) ctx.lineTo(x, y);
+      ctx.bezierCurveTo(76, 64, 76, 6, 58, -34);
+      break;
+    case 'wavy':
+      bottom = 98;
+      ctx.moveTo(-58, -34);
+      ctx.bezierCurveTo(-72, -6, -62, 14, -72, 34);
+      ctx.bezierCurveTo(-80, 54, -62, 66, -72, 86);
+      ctx.quadraticCurveTo(-72, 98, -58, 96);
+      for (const [x, y] of [[-48, 90], [-36, 98], [-20, 90], [0, 96], [20, 90], [36, 98], [48, 90], [58, 96]]) ctx.lineTo(x, y);
+      ctx.quadraticCurveTo(72, 98, 72, 86);
+      ctx.bezierCurveTo(62, 66, 80, 54, 72, 34);
+      ctx.bezierCurveTo(62, 14, 72, -6, 58, -34);
+      break;
+    case 'bob':
+      bottom = 50;
+      ctx.moveTo(-60, -24);
+      ctx.bezierCurveTo(-72, 16, -64, 48, -44, 50);
+      ctx.lineTo(44, 50);
+      ctx.bezierCurveTo(64, 48, 72, 16, 60, -24);
+      break;
+    case 'twin':
+      bottom = 40;
+      ctx.moveTo(-58, -20);
+      ctx.bezierCurveTo(-66, 20, -52, 40, -34, 40);
+      ctx.lineTo(34, 40);
+      ctx.bezierCurveTo(52, 40, 66, 20, 58, -20);
+      break;
+    case 'pony':
+      bottom = 36;
+      ctx.moveTo(-58, -20);
+      ctx.bezierCurveTo(-64, 16, -50, 36, -34, 36);
+      ctx.lineTo(34, 36);
+      ctx.bezierCurveTo(50, 36, 64, 16, 58, -20);
+      break;
+    case 'bun':
+      bottom = 36;
+      ctx.arc(0, -72, 19, 0, Math.PI * 2);
+      ctx.moveTo(-58, -20);
+      ctx.bezierCurveTo(-62, 16, -50, 32, -34, 32);
+      ctx.lineTo(34, 32);
+      ctx.bezierCurveTo(50, 32, 62, 16, 58, -20);
+      break;
+    case 'straight':
+      // 左はまっすぐ落ち、右は床で外へ広がる（左は頭巾が流れる側）
+      bottom = FLOOR;
+      ctx.moveTo(-58, -34);
+      ctx.bezierCurveTo(-76, 0, -76, 56, -72, FLOOR);
+      for (const [x, d] of [[-60, 3], [-46, 0], [-30, 2], [-14, 0], [0, 2], [16, 0], [32, 2], [48, 0], [64, 3]]) ctx.lineTo(x, FLOOR - d);
+      ctx.lineTo(84, FLOOR);
+      ctx.bezierCurveTo(74, 62, 78, 0, 58, -34);
+      break;
+    case 'short':
+      bottom = 28;
+      ctx.moveTo(-58, -20);
+      ctx.bezierCurveTo(-62, 12, -52, 26, -38, 26);
+      ctx.lineTo(38, 26);
+      ctx.bezierCurveTo(52, 26, 62, 12, 58, -20);
+      break;
+  }
+  ctx.closePath();
+  fillStroke(ctx, vgrad(ctx, -40, bottom, [mix(s.hair, s.hairShade, 0.45), mix(s.hair, s.hairShade, 0.2), s.hairTip]), 2.6);
+}
+
+/** ツインテール・ポニーテールの房（後ろ髪とは別に、毛先ほど大きく揺らす） */
+function hairTails(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  ctx.beginPath();
+  let bottom = 74;
+  if (s.style === 'twin') {
+    for (const side of [-1, 1]) {
+      ctx.moveTo(side * 52, -34);
+      ctx.bezierCurveTo(side * 96, -24, side * 92, 44, side * 72, 74);
+      ctx.bezierCurveTo(side * 70, 40, side * 64, 8, side * 46, -10);
+      ctx.closePath();
+    }
+  } else {
+    bottom = 64;
+    ctx.moveTo(34, -56);
+    ctx.bezierCurveTo(96, -62, 94, 28, 70, 64);
+    ctx.bezierCurveTo(70, 24, 62, -14, 44, -22);
+    ctx.closePath();
+  }
+  fillStroke(ctx, vgrad(ctx, -40, bottom, [mix(s.hair, s.hairShade, 0.45), mix(s.hair, s.hairShade, 0.2), s.hairTip]), 2.6);
+}
+
+// 前髪の下端（右 → 左）。ほぼ切りそろえた線に、とがった毛束をいくつか混ぜる
+const BANG_EDGES: Record<BangStyle, number[][]> = {
+  blunt: [[50, 8], [46, -3], [40, -6], [34, 1], [29, -7], [18, -8], [12, -1], [7, -9], [-4, -9], [-9, -1], [-14, -9], [-26, -8], [-31, 0], [-36, -7], [-44, -4], [-50, 8], [-57, 9]],
+  swept: [[50, 8], [45, -8], [38, -14], [33, -6], [28, -15], [18, -17], [12, -9], [6, -19], [-4, -15], [-10, -5], [-16, -12], [-28, -6], [-33, 2], [-38, -3], [-46, -1], [-52, 10], [-57, 9]],
+  split: [[50, 8], [45, -4], [38, -6], [32, 0], [27, -8], [16, -12], [10, -6], [4, -24], [-4, -24], [-10, -6], [-16, -12], [-27, -8], [-32, 0], [-38, -6], [-45, -4], [-50, 8], [-57, 9]],
+  // 目の下まで届く、ぱっつんの重い前髪。毛束の切れ目だけ小さく上がる
+  heavy: [[56, 12], [46, 7], [37, 8], [34, 1], [30, 7], [13, 7], [9, 0], [5, 7], [-13, 7], [-17, 0], [-21, 7], [-39, 7], [-48, 8], [-56, 12], [-59, 14]],
+  // 目のすぐ上でまっすぐ切りそろえ、右寄りに分け目がひとつ
+  hime: [[50, 8], [47, -1], [34, -1], [31, -5], [28, -1], [16, -1], [11, -12], [6, -1], [-10, -1], [-13, -5], [-16, -1], [-30, -1], [-33, -5], [-36, -1], [-47, -1], [-50, 8], [-57, 9]],
+};
+
+/** 前髪（頭のてっぺんから額まで） */
+function bangsPath(s: ChibiSpec): Path2D {
+  const p = new Path2D();
+  // 横の端はこめかみで止める（ほっぺまで下ろすと、伸ばしたほっぺに毛先が刺さって見える）
+  const e = s.bangs === 'heavy' ? 14 : 9;
+  p.moveTo(-58, e);
+  p.bezierCurveTo(-68, -38, -38, -73, 0, -73);
+  p.bezierCurveTo(38, -73, 68, -38, 58, e);
+  let px = 58;
+  let py = e;
+  for (const [x, y] of BANG_EDGES[s.bangs]) {
+    p.quadraticCurveTo((px + x) / 2, (py + y) / 2 + 1, x, y);
+    px = x;
+    py = y;
+  }
+  p.closePath();
+  return p;
+}
+
+/** 顔の横に垂れる髪と、三つ編み・垂れ耳。顔の輪郭より奥に描き、ほっぺの外側から毛先がのぞく */
+function sideHair(ctx: CanvasRenderingContext2D, s: ChibiSpec, body: boolean, sway: number): void {
+  const len = s.style === 'short' ? 22 : s.style === 'bob' ? 42 : s.style === 'straight' ? 96 : s.style === 'long' || s.style === 'wavy' ? 60 : 46;
+  // エルフィンは原作どおり左右で違う: 三つ編みの側（左）は耳にかけて短く、反対側（右）は肩から裾まで長く垂らす
+  const elfin = (s.extra === 'elfin' || s.extra === 'elfinWitch') && body;
+  bent(ctx, sway * SWAY.side, -22, () => {
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      if (elfin && side > 0) {
+        ctx.moveTo(54, -24);
+        ctx.bezierCurveTo(70, 6, 74, 40, 66, 70);
+        ctx.bezierCurveTo(61, 86, 70, 96, 64, 108);
+        ctx.quadraticCurveTo(59, 101, 54, 105);
+        ctx.bezierCurveTo(58, 92, 50, 80, 54, 64);
+        ctx.bezierCurveTo(57, 40, 50, 10, 42, -10);
+        ctx.closePath();
+        fillStroke(ctx, vgrad(ctx, -20, 108, [s.hair, s.hair, s.hairTip]), 2.4);
+        continue;
+      }
+      const l = elfin ? 30 : len;
+      ctx.moveTo(side * 54, -24);
+      ctx.bezierCurveTo(side * 68, 4, side * 68, l * 0.6, side * 60, l);
+      ctx.quadraticCurveTo(side * 55, l - 7, side * 50, l - 2);
+      ctx.bezierCurveTo(side * 50, l * 0.6, side * 48, 10, side * 42, -10);
+      ctx.closePath();
+      fillStroke(ctx, vgrad(ctx, -20, l, [s.hair, s.hair, s.hairTip]), 2.4);
+    }
+    if (elfin) braid(ctx, s);
+    if (s.extra === 'yomiGhost' && body) for (const side of [-1, 1]) twinBraid(ctx, s, side);
+  });
+  // 垂れ耳は横の髪より手前・顔より奥（付け根は前髪に隠れる）
+  if (s.ears === 'dog') bent(ctx, sway * SWAY.dogEars, -50, () => dogEars(ctx, s));
+}
+
+/** 前髪（毛束の線・つや・ヘアピンも） */
+function bangs(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  const path = bangsPath(s);
+  ctx.fillStyle = vgrad(ctx, -73, 12, [s.hair, s.hair, mix(s.hair, s.hairShade, 0.55)]);
+  ctx.fill(path);
+  // 毛束の線
+  ctx.save();
+  ctx.clip(path);
+  ctx.strokeStyle = s.hairShade;
+  ctx.lineWidth = 1.8;
+  const tip = s.bangs === 'heavy' ? 16 : 0;
+  ctx.beginPath();
+  ctx.moveTo(-14, -60);
+  ctx.quadraticCurveTo(-20, -36, -16, -14 + tip);
+  ctx.moveTo(16, -60);
+  ctx.quadraticCurveTo(22, -38, 20, -14 + tip);
+  ctx.moveTo(-40, -42);
+  ctx.quadraticCurveTo(-44, -22, -38, -6 + tip);
+  if (s.bangs === 'heavy') {
+    ctx.moveTo(38, -40);
+    ctx.quadraticCurveTo(42, -18, 40, 4);
+  }
+  ctx.stroke();
+  ctx.restore();
+  ctx.strokeStyle = ink();
+  ctx.lineWidth = 2.6 * lineK;
+  ctx.stroke(path);
+
+  // つや
+  ctx.fillStyle = s.shine;
+  if (!s.mob) {
+    // 丸いクリーム色の水玉のつや
+    for (const [x, y, r] of [[-40, -38, 6.5], [36, -46, 5.5], [-6, -62, 3.5]]) {
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else {
+    ctx.beginPath();
+    ctx.ellipse(-26, -52, 9, 5, -0.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(-8, -62, 4, 3, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  if (s.extra === 'eshur') {
+    // 黄土色のヘアピン
+    ctx.save();
+    ctx.translate(-30, -22);
+    ctx.rotate(0.7);
+    ctx.beginPath();
+    ctx.roundRect(-2.5, -9, 5, 18, 2.5);
+    fillStroke(ctx, '#d9a94e', 1.6);
+    ctx.restore();
+  }
+}
+
+/** エルフィンの片側の三つ編み */
+function braid(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  ctx.strokeStyle = ink();
+  ctx.lineWidth = 10.5 + 4.5 * lineK;
+  ctx.beginPath();
+  ctx.moveTo(-53, 8);
+  ctx.quadraticCurveTo(-60, 50, -55, 90);
+  ctx.stroke();
+  ctx.strokeStyle = s.hair;
+  ctx.lineWidth = 10.5;
+  ctx.stroke();
+  // 編み目（左右交互の斜線）
+  ctx.strokeStyle = s.hairShade;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  for (let i = 0; i < 9; i++) {
+    const t = (i + 0.5) / 9.5;
+    const y = 8 + 82 * t;
+    const x = -53 * (1 - t) * (1 - t) + -60 * 2 * t * (1 - t) + -55 * t * t;
+    const d = i % 2 ? 1 : -1;
+    ctx.moveTo(x - 5 * d, y - 3);
+    ctx.quadraticCurveTo(x, y - 1, x + 4 * d, y + 4);
+  }
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-55, 92);
+  ctx.quadraticCurveTo(-62, 100, -58, 108);
+  ctx.quadraticCurveTo(-55, 102, -51, 106);
+  ctx.quadraticCurveTo(-50, 98, -55, 92);
+  fillStroke(ctx, s.hairTip, 2);
+  dot(ctx, -55, 90, 3.6, '#ee8584', 1.6);
+}
+
+function elfEars(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(side * 48, -4);
+    ctx.quadraticCurveTo(side * 72, -12, side * 84, -26);
+    ctx.quadraticCurveTo(side * 74, 6, side * 50, 18);
+    ctx.closePath();
+    fillStroke(ctx, s.skin, 2.4);
+  }
+}
+
+function catEars(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(side * 18, -66);
+    ctx.lineTo(side * 42, -90);
+    ctx.lineTo(side * 52, -48);
+    ctx.closePath();
+    fillStroke(ctx, s.hair, 2.4);
+    ctx.fillStyle = '#f7c0c6';
+    ctx.beginPath();
+    ctx.moveTo(side * 27, -64);
+    ctx.lineTo(side * 41, -80);
+    ctx.lineTo(side * 46, -56);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+/** 頭の横から垂れる大きな犬の耳（髪と同じ色）。カチューシャのリボンがあれば片耳にも付ける */
+function dogEars(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(side * 34, -54);
+    ctx.bezierCurveTo(side * 72, -66, side * 92, -24, side * 88, 14);
+    ctx.quadraticCurveTo(side * 85, 38, side * 70, 33);
+    ctx.bezierCurveTo(side * 60, 22, side * 60, -8, side * 46, -38);
+    ctx.closePath();
+    fillStroke(ctx, sideShade(ctx, side * 44, side * 82, s.hair, s.hairShade, 0.7), 2.4);
+    ctx.strokeStyle = mix(s.hairShade, LINE, 0.3);
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(side * 64, -36);
+    ctx.quadraticCurveTo(side * 78, -6, side * 75, 22);
+    ctx.stroke();
+    if ((s.hat === 'bowband' || s.hat === 'bandage') && side === 1) bow(ctx, side * 72, -34, 0.4, 0.75, s.hatColor);
+  }
+}
+
+/** 体の後ろから出るしっぽ。cat = 細長く立ち上がる / dog = ふさふさで大きい */
+function tail(ctx: CanvasRenderingContext2D, t: NonNullable<ChibiSpec['tail']>): void {
+  if (t.kind === 'cat') {
+    tube(ctx, [16, 88, 92, 98, 80, 38], 10, t.color);
+    tube(ctx, [83, 54, 80, 38], 10, t.tip);
+    return;
+  }
+  ctx.beginPath();
+  ctx.moveTo(14, 92);
+  ctx.bezierCurveTo(38, 116, 88, 112, 88, 80);
+  ctx.bezierCurveTo(88, 62, 74, 56, 66, 64);
+  ctx.bezierCurveTo(62, 84, 40, 88, 14, 84);
+  ctx.closePath();
+  fillStroke(ctx, vgrad(ctx, 60, 110, [t.tip, t.color]), 2.4);
+  ctx.strokeStyle = mix(t.color, LINE, 0.35);
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(48, 96);
+  ctx.quadraticCurveTo(70, 94, 78, 76);
+  ctx.stroke();
+}
+
+/** 頭のてっぺんのアホ毛 1 本 */
+function ahoge(ctx: CanvasRenderingContext2D, s: ChibiSpec, sway: number): void {
+  // 根もとを軸に、髪の揺れと同じ向きへしなる
+  ctx.save();
+  ctx.translate(0, -60);
+  ctx.rotate(sway * SWAY.ahoge);
+  ctx.translate(0, 60);
+  ctx.beginPath();
+  ctx.moveTo(-4, -60);
+  ctx.bezierCurveTo(-2, -78, 16, -88, 18, -76);
+  ctx.bezierCurveTo(12, -82, 4, -76, 4, -60);
+  ctx.closePath();
+  fillStroke(ctx, s.hair, 2.2);
+  ctx.restore();
+}
+
+/** 左右の輪とまん中の結び目のリボン */
+function bow(ctx: CanvasRenderingContext2D, x: number, y: number, rot: number, sc: number, color: string): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rot);
+  ctx.scale(sc, sc);
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(side * 18, -16, side * 22, 0);
+    ctx.quadraticCurveTo(side * 18, 14, 0, 0);
+    fillStroke(ctx, color, 2.2 / sc);
+  }
+  dot(ctx, 0, 0, 5, color, 2.2 / sc);
+  ctx.restore();
+}
+
+// ------------------------------------------------------------------ hats
+
+function hat(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  switch (s.hat) {
+    case 'tiara':
+      tiara(ctx);
+      // 片側の髪の、ラベンダー色の結晶の髪飾り
+      crystal(ctx, -57, -24, 4, 8, '#9594bb', -0.3);
+      crystal(ctx, -61, -8, 3.5, 7, '#9594bb', -0.2);
+      break;
+    case 'beret':
+      beret(ctx, s);
+      break;
+    case 'veil':
+      veilFront(ctx, s);
+      break;
+    case 'ribbon':
+      bow(ctx, -38, -52, -0.4, 1, s.hatColor);
+      break;
+    case 'bowband': {
+      // 頭の上を回るカチューシャと、片側の大きなリボン
+      const band = () => {
+        ctx.beginPath();
+        ctx.ellipse(0, -12, 57, 52, 0, Math.PI * 1.12, Math.PI * 1.88);
+      };
+      band();
+      ctx.strokeStyle = ink();
+      ctx.lineWidth = 6 + 4 * lineK;
+      ctx.stroke();
+      band();
+      ctx.strokeStyle = s.hatColor;
+      ctx.lineWidth = 6;
+      ctx.stroke();
+      bow(ctx, -26, -60, -0.35, 0.85, s.hatColor);
+      break;
+    }
+    case 'leaf':
+      for (const [lx, ly, a] of [[-32, -58, -0.9], [-12, -70, -0.3], [9, -71, 0.3], [29, -60, 0.9]]) {
+        ctx.save();
+        ctx.translate(lx, ly);
+        ctx.rotate(a);
+        ctx.beginPath();
+        ctx.ellipse(0, -6, 6, 11, 0, 0, Math.PI * 2);
+        fillStroke(ctx, s.hatColor, 2.2);
+        ctx.restore();
+      }
+      break;
+    case 'witch':
+      witchHat(ctx, s);
+      break;
+    case 'skull':
+      skullOrnament(ctx, -44, -64, -0.28);
+      break;
+    case 'bandage':
+      bandageWrap(ctx, s);
+      break;
+    case 'headband': {
+      const band = () => {
+        ctx.beginPath();
+        ctx.ellipse(0, -14, 57, 52, 0, Math.PI * 1.13, Math.PI * 1.87);
+      };
+      band();
+      ctx.strokeStyle = ink();
+      ctx.lineWidth = 6.5 + 4 * lineK;
+      ctx.stroke();
+      band();
+      ctx.strokeStyle = s.hatColor;
+      ctx.lineWidth = 6.5;
+      ctx.stroke();
+      break;
+    }
+    case 'batWings':
+      batWings(ctx, s);
+      break;
+    case 'maid': {
+      // フリルのカチューシャ
+      const frill = (a: number) => {
+        ctx.save();
+        ctx.translate(Math.cos(a) * 57, -30 + Math.sin(a) * 42);
+        ctx.rotate(a + Math.PI / 2);
+        ctx.beginPath();
+        ctx.roundRect(-5, -12, 10, 10, 2.5);
+        fillStroke(ctx, '#ffffff', 1.8);
+        ctx.restore();
+      };
+      for (let i = 0; i <= 6; i++) frill(Math.PI * (1.13 + (0.74 * i) / 6));
+      ctx.beginPath();
+      ctx.ellipse(0, -30, 57, 42, 0, Math.PI * 1.08, Math.PI * 1.92);
+      ctx.strokeStyle = ink();
+      ctx.lineWidth = 5.6 + 4.4 * lineK;
+      ctx.stroke();
+      ctx.strokeStyle = s.hatColor;
+      ctx.lineWidth = 5.6;
+      ctx.stroke();
+      break;
+    }
+    case null:
+      break;
+  }
+}
+
+/** エルフィンの角ばったティアラ（斜めにかぶる） */
+function tiara(ctx: CanvasRenderingContext2D): void {
+  ctx.save();
+  ctx.translate(-8, -66);
+  ctx.rotate(-0.24);
+  ctx.beginPath();
+  ctx.moveTo(-30, 10);
+  ctx.lineTo(-35, -7);
+  ctx.lineTo(-16, 0);
+  ctx.lineTo(0, -22);
+  ctx.lineTo(16, 0);
+  ctx.lineTo(35, -7);
+  ctx.lineTo(30, 10);
+  ctx.quadraticCurveTo(0, 4, -30, 10);
+  ctx.closePath();
+  fillStroke(ctx, GOLD, 2.2);
+  ctx.fillStyle = GOLD_SHADE;
+  ctx.beginPath();
+  ctx.moveTo(-30, 10);
+  ctx.quadraticCurveTo(0, 4, 30, 10);
+  ctx.lineTo(29, 5);
+  ctx.quadraticCurveTo(0, -1, -29, 5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-28, -2);
+  ctx.lineTo(-20, 1);
+  ctx.moveTo(-4, -14);
+  ctx.lineTo(-8, -6);
+  ctx.stroke();
+  crystal(ctx, 0, -4, 6, 10, '#c6dae4');
+  crystal(ctx, -22, 3, 3.5, 5, '#c6dae4');
+  crystal(ctx, 22, 3, 3.5, 5, '#c6dae4');
+  ctx.restore();
+}
+
+/** エシュールの灰青のベレー帽と、オレンジの謎の生き物のバッジ */
+function beret(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  // 右に垂れるリボン
+  ctx.beginPath();
+  ctx.moveTo(36, -54);
+  ctx.quadraticCurveTo(46, -40, 43, -22);
+  ctx.lineTo(51, -22);
+  ctx.quadraticCurveTo(54, -40, 44, -56);
+  ctx.closePath();
+  fillStroke(ctx, '#8f9bc0', 2);
+  ctx.beginPath();
+  ctx.moveTo(42, -24);
+  ctx.lineTo(47, -14);
+  ctx.lineTo(52, -24);
+  ctx.lineTo(52, -18);
+  ctx.lineTo(47, -9);
+  ctx.lineTo(42, -18);
+  ctx.closePath();
+  fillStroke(ctx, '#fedd79', 1.6);
+
+  ctx.save();
+  ctx.translate(-4, -66);
+  ctx.rotate(-0.12);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 56, 21, 0, 0, Math.PI * 2);
+  fillStroke(ctx, vgrad(ctx, -21, 21, [mix(s.hatColor, '#ffffff', 0.22), s.hatColor, mix(s.hatColor, LINE, 0.1)]), 2.4);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+  ctx.beginPath();
+  ctx.ellipse(-16, -8, 22, 6, -0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.roundRect(-3, -27, 6, 9, 3);
+  fillStroke(ctx, s.hatColor, 2);
+  ctx.restore();
+
+  critter(ctx, 38, -60, 1);
+}
+
+/** オレンジの猫の顔のピン。下に青とオレンジの山形のリボンを下げる */
+function critter(ctx: CanvasRenderingContext2D, x: number, y: number, sc: number): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(sc, sc);
+  for (const [color, dy] of [['#fdb155', 15], ['#5b7fc4', 10]] as const) {
+    ctx.beginPath();
+    ctx.moveTo(-6, dy - 4);
+    ctx.lineTo(0, dy);
+    ctx.lineTo(6, dy - 4);
+    ctx.lineTo(6, dy + 1);
+    ctx.lineTo(0, dy + 5);
+    ctx.lineTo(-6, dy + 1);
+    ctx.closePath();
+    fillStroke(ctx, color, 1.5);
+  }
+  ctx.beginPath();
+  ctx.moveTo(-10, 2);
+  ctx.lineTo(-9.5, -12);
+  ctx.lineTo(-3.5, -6.5);
+  ctx.quadraticCurveTo(0, -7.5, 3.5, -6.5);
+  ctx.lineTo(9.5, -12);
+  ctx.lineTo(10, 2);
+  ctx.quadraticCurveTo(10, 8.5, 0, 8.5);
+  ctx.quadraticCurveTo(-10, 8.5, -10, 2);
+  ctx.closePath();
+  fillStroke(ctx, '#fdb155', 1.8);
+  ctx.fillStyle = eyeInk();
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.arc(side * 4, 0, 1.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.strokeStyle = ink();
+  ctx.lineWidth = 1.3 * lineK;
+  ctx.beginPath();
+  ctx.moveTo(-2.6, 3.2);
+  ctx.quadraticCurveTo(-1.3, 4.8, 0, 3.4);
+  ctx.quadraticCurveTo(1.3, 4.8, 2.6, 3.2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** ネルのヴェールの前側（頭を覆う暗い布と、額の白い帯） */
+function veilFront(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  ctx.beginPath();
+  ctx.moveTo(-64, -10);
+  ctx.bezierCurveTo(-70, -62, -38, -86, 0, -86);
+  ctx.bezierCurveTo(38, -86, 70, -62, 64, -10);
+  ctx.bezierCurveTo(58, -38, 34, -54, 0, -54);
+  ctx.bezierCurveTo(-34, -54, -58, -38, -64, -10);
+  ctx.closePath();
+  const speaki = s.extra === 'speaki' || s.extra === 'spikey';
+  fillStroke(ctx, vgrad(ctx, -86, -10, [speaki ? VEIL_TOP : '#7d7893', s.hatColor]), 2.6);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
+  ctx.beginPath();
+  ctx.ellipse(-24, -72, 16, 5, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+  if (speaki) {
+    star(ctx, -36, -66, 2.6, GOLD);
+    star(ctx, 33, -69, 2.4, GOLD);
+  }
+  const band = () => {
+    ctx.beginPath();
+    ctx.moveTo(-61, -18);
+    ctx.bezierCurveTo(-55, -42, -32, -57, 0, -57);
+    ctx.bezierCurveTo(32, -57, 55, -42, 61, -18);
+  };
+  band();
+  ctx.strokeStyle = ink();
+  ctx.lineWidth = 6 + 4 * lineK;
+  ctx.stroke();
+  band();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 6;
+  ctx.stroke();
+  if (speaki) {
+    // 帯のてっぺんの金の星
+    star(ctx, 0, -58, 5.5, GOLD, 1.5);
+  }
+}
+
+// ------------------------------------------------------------------ body
+
+function drawBody(ctx: CanvasRenderingContext2D, s: ChibiSpec, pose: ChibiPose): void {
+  if (s.mob) {
+    mobLegs(ctx, s);
+    mobBody(ctx, s);
+    return;
+  }
+  if (!s.crouch) legs(ctx, s);
+  switch (s.extra) {
+    case 'elfin':
+      elfinBody(ctx, s, pose);
+      break;
+    case 'nell':
+      nellBody(ctx, s, pose);
+      break;
+    case 'eshur':
+      eshurBody(ctx, s, pose);
+      break;
+    case 'komi':
+      komiBody(ctx, s);
+      break;
+    case 'butter':
+      butterBody(ctx, s);
+      break;
+    case 'speaki':
+      speakiBody(ctx, s);
+      break;
+    case 'kommyReaper':
+      kommyReaperBody(ctx, s);
+      break;
+    case 'elfinWitch':
+      elfinWitchBody(ctx, s);
+      break;
+    case 'butterMummy':
+      butterMummyBody(ctx, s);
+      break;
+    case 'yomiGhost':
+      yomiGhostBody(ctx, s);
+      break;
+    case 'joanneVampire':
+      joanneVampireBody(ctx, s);
+      break;
+    case 'spikey':
+      spikeyBody(ctx, s);
+      break;
+    default:
+      villagerBody(ctx, s);
+  }
+}
+
+/**
+ * 原作の SD の脚: タイツをはいた両脚をひとかたまりの短い棒にまとめ、下だけ小さく割る。
+ * 上は legs（タイツ）、下は shoes（靴・ブーツ）の色へ変わる
+ */
+function legs(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  ctx.beginPath();
+  ctx.moveTo(-11.5, 90);
+  ctx.lineTo(-10.5, 112.5);
+  ctx.quadraticCurveTo(-10.5, 117, -6, 117);
+  ctx.lineTo(-1.4, 117);
+  ctx.lineTo(0, 110.5);
+  ctx.lineTo(1.4, 117);
+  ctx.lineTo(6, 117);
+  ctx.quadraticCurveTo(10.5, 117, 10.5, 112.5);
+  ctx.lineTo(11.5, 90);
+  ctx.closePath();
+  fillStroke(ctx, vgrad(ctx, 90, 117, [s.legs, s.legs, mix(s.legs, s.shoes, 0.5), s.shoes]), 2.2);
+  // ひざの小さなつや
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
+  ctx.beginPath();
+  ctx.ellipse(-5, 100, 2.2, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function mobLegs(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.roundRect(side * 11 - 8.5, 90, 17, 22, 6);
+    fillStroke(ctx, s.legs, 2.2);
+    const g = ctx.createRadialGradient(side * 11, 103, 0.5, side * 11, 103, 6);
+    g.addColorStop(0, 'rgba(242, 130, 136, 0.8)');
+    g.addColorStop(1, 'rgba(246, 160, 162, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(side * 11, 103, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.roundRect(side * 11 - 9.5, 108, 19, 9.5, 4.8);
+    fillStroke(ctx, s.shoes, 2.2);
+  }
+}
+
+function mobBody(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  torsoPath(ctx, 40);
+  fillStroke(ctx, sideShade(ctx, -40, 40, s.outfit, s.outfitShade));
+  if (s.apron) {
+    // 縫い目の点線が入ったエプロン
+    ctx.beginPath();
+    ctx.roundRect(-21, 64, 42, 31, [3, 3, 9, 9]);
+    fillStroke(ctx, s.apron, 2);
+    ctx.save();
+    ctx.setLineDash([3, 2.6]);
+    ctx.strokeStyle = mix(s.apron, LINE, 0.45);
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.roundRect(-17, 67, 34, 24, [2, 2, 6, 6]);
+    ctx.stroke();
+    ctx.restore();
+  }
+  // 丸い襟
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(0, 45);
+    ctx.quadraticCurveTo(side * 20, 40, side * 20, 51);
+    ctx.quadraticCurveTo(side * 11, 57, 0, 50);
+    ctx.closePath();
+    fillStroke(ctx, s.collar, 2);
+  }
+  // ふくらんだ袖から、胸の前で組んだ手へ
+  for (const side of [-1, 1]) {
+    tube(ctx, [side * 22, 52, side * 19, 62, side * 6, 64], 10, s.outfit);
+    ctx.beginPath();
+    ctx.ellipse(side * 21, 50, 9, 8.5, side * 0.3, 0, Math.PI * 2);
+    fillStroke(ctx, s.outfit, 2.2);
+  }
+  const hand = mix(s.skin, '#f3a0a4', 0.28);
+  dot(ctx, 3.5, 64, 6, hand, 2.2);
+  dot(ctx, -3.5, 63, 6, hand, 2.2);
+}
+
+/** 胴とスカートの形（肩 y=42、裾 y=98） */
+function torsoPath(ctx: CanvasRenderingContext2D, flare = 36): void {
+  ctx.beginPath();
+  ctx.moveTo(-19, 42);
+  ctx.quadraticCurveTo(-26, 58, -25, 74);
+  ctx.quadraticCurveTo(-flare + 2, 88, -flare, 98);
+  ctx.lineTo(flare, 98);
+  ctx.quadraticCurveTo(flare - 2, 88, 25, 74);
+  ctx.quadraticCurveTo(26, 58, 19, 42);
+  ctx.closePath();
+}
+
+function arm(ctx: CanvasRenderingContext2D, s: ChibiSpec, side: number, hx: number, hy: number, sleeve: string, cuff?: string): void {
+  tube(ctx, [side * 20, 50, side * 30, 60, hx, hy], 12, sleeve);
+  if (cuff) {
+    const dx = hx - side * 30;
+    const dy = hy - 60;
+    const l = Math.hypot(dx, dy) || 1;
+    tube(ctx, [hx - (dx / l) * 5, hy - (dy / l) * 5, hx - (dx / l) * 1.5, hy - (dy / l) * 1.5], 13, cuff);
+  }
+  dot(ctx, hx, hy + 3, 6.5, s.skin, 2.2);
+}
+
+function villagerBody(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  torsoPath(ctx);
+  fillStroke(ctx, sideShade(ctx, -36, 36, s.outfit, s.outfitShade));
+  for (const side of [-1, 1]) arm(ctx, s, side, side * 31, 76, s.outfit);
+  // 丸い襟
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(0, 45);
+    ctx.quadraticCurveTo(side * 22, 40, side * 22, 52);
+    ctx.quadraticCurveTo(side * 12, 59, 0, 51);
+    ctx.closePath();
+    fillStroke(ctx, s.collar, 2);
+  }
+  dot(ctx, 0, 58, 2.6, s.outfitShade, 1.6);
+}
+
+/** 短パン（腰 y=80、裾 y=97） */
+function shorts(ctx: CanvasRenderingContext2D, color: string, shade: string): void {
+  ctx.beginPath();
+  ctx.roundRect(-24, 80, 48, 17, [2, 2, 6, 6]);
+  fillStroke(ctx, sideShade(ctx, -24, 24, color, shade));
+  ctx.strokeStyle = ink();
+  ctx.lineWidth = 1.6 * lineK;
+  ctx.beginPath();
+  ctx.moveTo(0, 87);
+  ctx.lineTo(0, 97);
+  ctx.stroke();
+}
+
+/** ゆったりした上着の形（肩 y=42、裾 y=86） */
+function loosePath(ctx: CanvasRenderingContext2D, hem: number): void {
+  ctx.beginPath();
+  ctx.moveTo(-21, 42);
+  ctx.quadraticCurveTo(-hem, 60, -hem, 85);
+  ctx.quadraticCurveTo(0, 91, hem, 85);
+  ctx.quadraticCurveTo(hem, 60, 21, 42);
+  ctx.closePath();
+}
+
+/** コミー: 片方の肩がずり落ちたぶかぶかの白いシャツ（襟と袖口にピンクの線）と、ピンクの短パン */
+function komiBody(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  shorts(ctx, '#febcbd', '#e59aa2');
+  loosePath(ctx, 31);
+  fillStroke(ctx, sideShade(ctx, -31, 31, s.outfit, s.outfitShade));
+  ctx.fillStyle = s.skin;
+  ctx.beginPath();
+  ctx.ellipse(-15, 47, 11, 5.5, -0.25, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = s.collar;
+  ctx.lineWidth = 2.6;
+  ctx.beginPath();
+  ctx.moveTo(-27, 53);
+  ctx.quadraticCurveTo(-6, 57, 18, 45);
+  ctx.stroke();
+  for (const side of [-1, 1]) arm(ctx, s, side, side * 30, 78, s.outfit, s.collar);
+}
+
+/** バター: 白いブラウスに胸ポケットの黄色いベスト、金の鈴の首輪、斜め掛けの犬の顔のポーチ、薄ピンクの短パン */
+function butterBody(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  // 裾からのぞくピンクのフリル
+  ctx.beginPath();
+  ctx.moveTo(-37, 84);
+  ctx.lineTo(37, 84);
+  ctx.lineTo(37.5, 92);
+  for (let i = 0; i < 8; i++) {
+    const x0 = 37.5 - (75 / 8) * i;
+    const x1 = x0 - 75 / 8;
+    ctx.quadraticCurveTo((x0 + x1) / 2, 99, x1, 92);
+  }
+  ctx.closePath();
+  fillStroke(ctx, sideShade(ctx, -38, 38, '#fed4d3', '#eab3b6'), 2);
+  // 黄色いワンピース（肩から裾まで一続き。腰から少し広がる）
+  ctx.beginPath();
+  ctx.moveTo(-17, 43);
+  ctx.quadraticCurveTo(-24, 56, -22, 66);
+  ctx.quadraticCurveTo(-32, 77, -37, 89);
+  ctx.quadraticCurveTo(0, 95, 37, 89);
+  ctx.quadraticCurveTo(32, 77, 22, 66);
+  ctx.quadraticCurveTo(24, 56, 17, 43);
+  ctx.closePath();
+  fillStroke(ctx, sideShade(ctx, -37, 37, '#fed588', '#e3ac6c', 0.66));
+  // 腰の切り替えと、スカートのひだ・裾の白いライン
+  ctx.strokeStyle = '#d99a5c';
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(-22, 66);
+  ctx.quadraticCurveTo(0, 70, 22, 66);
+  ctx.moveTo(-9, 70);
+  ctx.quadraticCurveTo(-12, 80, -15, 91);
+  ctx.moveTo(9, 70);
+  ctx.quadraticCurveTo(12, 80, 15, 91);
+  ctx.stroke();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.moveTo(-34, 85.5);
+  ctx.quadraticCurveTo(0, 91.5, 34, 85.5);
+  ctx.stroke();
+  // スカートのポケット
+  ctx.beginPath();
+  ctx.roundRect(13, 73, 10, 8, [1, 1, 3, 3]);
+  fillStroke(ctx, '#fbc96e', 1.6);
+  // 白いブラウスのふくらんだ半袖と丸い襟
+  for (const side of [-1, 1]) {
+    arm(ctx, s, side, side * 31, 76, s.skin);
+    ctx.beginPath();
+    ctx.ellipse(side * 23, 53, 9.5, 8.5, side * -0.5, 0, Math.PI * 2);
+    fillStroke(ctx, sideShade(ctx, side * 14, side * 32, s.outfit, s.outfitShade), 2.2);
+  }
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(0, 46);
+    ctx.quadraticCurveTo(side * 20, 41, side * 20, 51);
+    ctx.quadraticCurveTo(side * 11, 57, 0, 50);
+    ctx.closePath();
+    fillStroke(ctx, s.collar, 2);
+  }
+  // 胸のリボン
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(0, 60);
+    ctx.quadraticCurveTo(side * 6, 53, side * 10, 56);
+    ctx.quadraticCurveTo(side * 11, 62, side * 9, 65);
+    ctx.quadraticCurveTo(side * 5, 64, 0, 60);
+    ctx.closePath();
+    fillStroke(ctx, '#fbc35a', 1.8);
+  }
+  dot(ctx, 0, 60, 2.8, '#f5b041', 1.6);
+  // 首輪と鈴
+  ctx.beginPath();
+  ctx.roundRect(-14, 42, 28, 5.5, 2.5);
+  fillStroke(ctx, '#3b3135', 1.6);
+  dot(ctx, 0, 51, 4.2, '#fdd36b', 1.6);
+  ctx.beginPath();
+  ctx.moveTo(-2, 52.5);
+  ctx.lineTo(2, 52.5);
+  ctx.stroke();
+  // 斜め掛けのひもと、犬の顔のポーチ
+  tube(ctx, [17, 45, -19, 79], 3, '#9e807e');
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.ellipse(-24 + side * 8, 80, 4, 6.5, side * 0.5, 0, Math.PI * 2);
+    fillStroke(ctx, '#7f6461', 1.6);
+  }
+  dot(ctx, -24, 85, 8.5, '#b39390', 2);
+  ctx.fillStyle = LINE;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.arc(-24 + side * 3.5, 84, 1.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.beginPath();
+  ctx.ellipse(-24, 87.5, 1.8, 1.3, 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function elfinBody(ctx: CanvasRenderingContext2D, s: ChibiSpec, pose: ChibiPose): void {
+  torsoPath(ctx);
+  fillStroke(ctx, sideShade(ctx, -36, 36, s.outfit, s.outfitShade));
+  // スカートの裾（金とコーラルの縁）
+  ctx.strokeStyle = '#dd857b';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-34, 95);
+  ctx.lineTo(34, 95);
+  ctx.stroke();
+  // 前の金のライン
+  ctx.strokeStyle = GOLD;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-7, 62);
+  ctx.lineTo(-9, 96);
+  ctx.moveTo(7, 62);
+  ctx.lineTo(9, 96);
+  ctx.stroke();
+  // 腰のベルト
+  ctx.beginPath();
+  ctx.moveTo(-25, 72);
+  ctx.quadraticCurveTo(0, 76, 25, 72);
+  ctx.strokeStyle = ink();
+  ctx.lineWidth = 3.2 + 2.3 * lineK;
+  ctx.stroke();
+  ctx.strokeStyle = '#6b3436';
+  ctx.lineWidth = 3.2;
+  ctx.stroke();
+  crystal(ctx, 0, 86, 4.5, 6, '#c6dae4');
+
+  const hold = pose.prop;
+  arm(ctx, s, -1, -31, 76, WHITE, GOLD);
+  arm(ctx, s, 1, hold ? 44 : 31, hold ? 66 : 76, WHITE, GOLD);
+
+  // 赤いケープカラー
+  ctx.beginPath();
+  ctx.moveTo(-22, 43);
+  ctx.quadraticCurveTo(-34, 50, -32, 61);
+  ctx.quadraticCurveTo(0, 69, 32, 61);
+  ctx.quadraticCurveTo(34, 50, 22, 43);
+  ctx.closePath();
+  fillStroke(ctx, sideShade(ctx, -34, 34, '#ee8584', '#d86f73', 0.66));
+  ctx.strokeStyle = GOLD;
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.moveTo(-30, 60);
+  ctx.quadraticCurveTo(0, 67.5, 30, 60);
+  ctx.stroke();
+  crystal(ctx, 0, 54, 6.5, 7.5, GOLD);
+  crystal(ctx, 0, 54, 3.4, 4.5, '#c6dae4');
+}
+
+function nellBody(ctx: CanvasRenderingContext2D, s: ChibiSpec, pose: ChibiPose): void {
+  torsoPath(ctx, 34);
+  fillStroke(ctx, sideShade(ctx, -34, 34, s.outfit, s.outfitShade));
+  // 裾の白いフリル
+  for (let x = -30; x <= 30; x += 7.5) dot(ctx, x, 98, 3.8, WHITE, 1.6);
+  // 白い前掛けと金のひし形
+  ctx.beginPath();
+  ctx.moveTo(-11, 66);
+  ctx.lineTo(11, 66);
+  ctx.lineTo(13, 92);
+  ctx.lineTo(0, 96);
+  ctx.lineTo(-13, 92);
+  ctx.closePath();
+  fillStroke(ctx, WHITE, 2);
+  ctx.strokeStyle = '#d69d57';
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.moveTo(-12, 90);
+  ctx.lineTo(0, 94);
+  ctx.lineTo(12, 90);
+  ctx.stroke();
+  crystal(ctx, 0, 85, 3.6, 4.6, '#d69d57');
+  // 腰のポーチ
+  ctx.beginPath();
+  ctx.roundRect(15, 66, 12, 12, 3);
+  fillStroke(ctx, '#8a5e4c', 2);
+
+  // 手は体の前で組む（斧を持つ時は左手で柄を握る）
+  if (pose.prop) {
+    arm(ctx, s, -1, -30, 80, s.outfit, WHITE);
+    arm(ctx, s, 1, 6, 70, s.outfit, WHITE);
+  } else {
+    arm(ctx, s, -1, -4, 70, s.outfit, WHITE);
+    arm(ctx, s, 1, 4, 71, s.outfit, WHITE);
+  }
+
+  // 白い小ケープと金の十字
+  ctx.beginPath();
+  ctx.moveTo(-22, 43);
+  ctx.quadraticCurveTo(-36, 52, -33, 63);
+  ctx.quadraticCurveTo(0, 71, 33, 63);
+  ctx.quadraticCurveTo(36, 52, 22, 43);
+  ctx.closePath();
+  fillStroke(ctx, sideShade(ctx, -34, 34, WHITE, '#e2d4dd', 0.66));
+  ctx.beginPath();
+  ctx.roundRect(-2.6, 46, 5.2, 18, 1.5);
+  ctx.roundRect(-8, 51, 16, 4.6, 1.5);
+  fillStroke(ctx, '#cc9359', 1.6);
+}
+
+/**
+ * スピッキー: ネルをまねたシスター服で、床にしゃがみこんでいる。星の付いた黒いスカートが床に広がり、
+ * ラベンダーのフリルとひざがのぞく。黒い袖の両手はひざの間で床につく。白い襟にオレンジの蝶ネクタイ、腰にドクロの仮面
+ */
+function speakiBody(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  const F = FLOOR;
+  // 床に広がる黒いスカートと星
+  const skirt = new Path2D();
+  skirt.moveTo(-26, 44);
+  skirt.bezierCurveTo(-58, 50, -76, 76, -76, F);
+  skirt.lineTo(76, F);
+  skirt.bezierCurveTo(76, 76, 58, 50, 26, 44);
+  skirt.closePath();
+  ctx.fillStyle = sideShade(ctx, -76, 76, s.outfit, s.outfitShade);
+  ctx.fill(skirt);
+  ctx.save();
+  ctx.clip(skirt);
+  for (const [x, y] of [[-62, 80], [-50, 94], [56, 82], [66, 96]]) star(ctx, x, y, 2.6, GOLD);
+  ctx.restore();
+  ctx.strokeStyle = ink();
+  ctx.lineWidth = 2.4 * lineK;
+  ctx.stroke(skirt);
+  // 内側のラベンダーのフリル
+  ctx.beginPath();
+  ctx.moveTo(-56, F);
+  ctx.quadraticCurveTo(-52, F - 20, -32, F - 24);
+  ctx.lineTo(32, F - 24);
+  ctx.quadraticCurveTo(52, F - 20, 56, F);
+  ctx.closePath();
+  fillStroke(ctx, sideShade(ctx, -56, 56, LAVENDER, LAVENDER_SHADE), 2.2);
+  for (let x = -52; x <= 52; x += 6.5) dot(ctx, x, F - 1.5, 3, LACE, 1.3);
+
+  // 立てたひざ（ラベンダーの長靴下）と靴
+  for (const side of [-1, 1]) {
+    const x = side * 30;
+    ctx.beginPath();
+    ctx.ellipse(x + side * 1.5, F - 1, 11, 5.5, 0, 0, Math.PI * 2);
+    fillStroke(ctx, s.shoes, 2.2);
+    ctx.beginPath();
+    ctx.roundRect(x - 12, 52, 24, F - 53, [12, 12, 6, 6]);
+    fillStroke(ctx, sideShade(ctx, x - 12, x + 12, s.legs, LAVENDER_SHADE, 0.7), 2.2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.beginPath();
+    ctx.ellipse(x - 4, 60, 4, 3, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    for (let i = 0; i < 4; i++) dot(ctx, x - 8 + i * 5.3, F - 20, 2.7, LACE, 1.2);
+  }
+  skull(ctx, -66, 86, 1.4);
+
+  // 胸元: ラベンダーのベストに白い襟とオレンジの蝶ネクタイ
+  ctx.beginPath();
+  ctx.roundRect(-22, 42, 44, 40, [4, 4, 10, 10]);
+  fillStroke(ctx, sideShade(ctx, -22, 22, LAVENDER, LAVENDER_SHADE), 2.2);
+  ctx.beginPath();
+  ctx.moveTo(-17, 44);
+  ctx.quadraticCurveTo(-24, 50, -18, 56);
+  ctx.quadraticCurveTo(-8, 57, 0, 50);
+  ctx.quadraticCurveTo(8, 57, 18, 56);
+  ctx.quadraticCurveTo(24, 50, 17, 44);
+  ctx.closePath();
+  fillStroke(ctx, WHITE, 2);
+  bow(ctx, 0, 52, 0, 0.5, PUMPKIN);
+
+  // ひざの間へまっすぐ下ろした腕。手は床につく
+  for (const side of [-1, 1]) {
+    tube(ctx, [side * 24, 46, side * 20, 70, side * 13, F - 12], 12.5, s.outfit);
+    tube(ctx, [side * 13.6, F - 14, side * 12.6, F - 9.5], 13.5, WHITE);
+    ctx.beginPath();
+    ctx.ellipse(side * 12, F - 4.5, 7, 4.8, 0, 0, Math.PI * 2);
+    fillStroke(ctx, s.skin, 2.2);
+  }
+}
+
+/** 幽霊のしるしのドクロの仮面 */
+function skull(ctx: CanvasRenderingContext2D, x: number, y: number, sc = 1): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(sc, sc);
+  ctx.beginPath();
+  ctx.roundRect(-4.5, 2, 9, 6.5, 2.5);
+  fillStroke(ctx, WHITE, 1.8);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 7.5, 6.5, 0, 0, Math.PI * 2);
+  fillStroke(ctx, WHITE, 1.8);
+  ctx.fillStyle = LINE;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.ellipse(side * 2.8, 0.5, 2, 2.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function eshurBody(ctx: CanvasRenderingContext2D, s: ChibiSpec, pose: ChibiPose): void {
+  // くすんだローズのプリーツスカート
+  ctx.beginPath();
+  ctx.moveTo(-26, 76);
+  ctx.lineTo(-36, 98);
+  ctx.lineTo(36, 98);
+  ctx.lineTo(26, 76);
+  ctx.closePath();
+  fillStroke(ctx, sideShade(ctx, -36, 36, '#b97378', '#a5646a'));
+  ctx.strokeStyle = '#8f5258';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  for (const x of [-18, -6, 6, 18]) {
+    ctx.moveTo(x * 0.75, 78);
+    ctx.lineTo(x, 97);
+  }
+  ctx.stroke();
+  // クリーム色のセーター
+  ctx.beginPath();
+  ctx.moveTo(-19, 42);
+  ctx.quadraticCurveTo(-27, 58, -27, 80);
+  ctx.lineTo(27, 80);
+  ctx.quadraticCurveTo(27, 58, 19, 42);
+  ctx.closePath();
+  fillStroke(ctx, sideShade(ctx, -27, 27, s.outfit, s.outfitShade));
+  ctx.strokeStyle = s.outfitShade;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-25, 76);
+  ctx.lineTo(25, 76);
+  ctx.stroke();
+  // V ネックから見える白シャツとネクタイ
+  ctx.beginPath();
+  ctx.moveTo(-12, 43);
+  ctx.lineTo(0, 62);
+  ctx.lineTo(12, 43);
+  ctx.closePath();
+  fillStroke(ctx, WHITE, 2);
+  ctx.beginPath();
+  ctx.moveTo(-2.5, 48);
+  ctx.lineTo(2.5, 48);
+  ctx.lineTo(3.5, 60);
+  ctx.lineTo(0, 64);
+  ctx.lineTo(-3.5, 60);
+  ctx.closePath();
+  fillStroke(ctx, '#6f8fcf', 1.6);
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(0, 46);
+    ctx.lineTo(side * 12, 42);
+    ctx.lineTo(side * 9, 50);
+    ctx.closePath();
+    fillStroke(ctx, WHITE, 1.8);
+  }
+  // 斜めがけのポーチの紐
+  ctx.strokeStyle = ink();
+  ctx.lineWidth = 3.4 + 2.6 * lineK;
+  ctx.beginPath();
+  ctx.moveTo(17, 46);
+  ctx.lineTo(-20, 82);
+  ctx.stroke();
+  ctx.strokeStyle = '#977473';
+  ctx.lineWidth = 3.4;
+  ctx.stroke();
+
+  const hold = pose.prop;
+  arm(ctx, s, -1, -31, 76, s.outfit, s.outfitShade);
+  arm(ctx, s, 1, hold ? 40 : 31, hold ? 64 : 76, s.outfit, s.outfitShade);
+
+  // ポーチ
+  ctx.beginPath();
+  ctx.roundRect(-30, 78, 17, 13, 3);
+  fillStroke(ctx, '#fbf6ef', 2);
+  dot(ctx, -21.5, 84.5, 2.8, '#f08a4b', 1.2);
+  // ネクタイの猫のピン
+  critter(ctx, 0, 54, 0.5);
+}
+
+// ------------------------------------------------------------------ halloween costumes
+// GiGO コラボ「トリッカル or トリート!!」の仮装を、設定の特徴から描き起こしたもの（公式イラストの模写ではない）
+
+const WITCH_RED = '#c94f55';
+const RIBBON_YELLOW = '#fbcf5a';
+const CAPE_BLACK = '#2f2b35';
+
+/** 4 つの角のきらめき（瞳の星） */
+function sparkle(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
+  ctx.beginPath();
+  ctx.moveTo(x, y - r);
+  ctx.quadraticCurveTo(x, y, x + r * 0.8, y);
+  ctx.quadraticCurveTo(x, y, x, y + r);
+  ctx.quadraticCurveTo(x, y, x - r * 0.8, y);
+  ctx.quadraticCurveTo(x, y, x, y - r);
+  ctx.fillStyle = WHITE;
+  ctx.fill();
+}
+
+/** 袖口の広い袖（内側は lining の色）。手は (hx, hy) */
+function bellArm(ctx: CanvasRenderingContext2D, s: ChibiSpec, side: number, hx: number, hy: number, sleeve: string, lining: string): void {
+  tube(ctx, [side * 20, 48, side * 30, 62, hx, hy], 13, sleeve);
+  const dx = hx - side * 30;
+  const dy = hy - 62;
+  const l = Math.hypot(dx, dy) || 1;
+  ctx.save();
+  ctx.translate(hx - (dx / l) * 2, hy - (dy / l) * 2);
+  ctx.rotate(Math.atan2(dy, dx));
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 3.6, 10, 0, 0, Math.PI * 2);
+  fillStroke(ctx, lining, 2);
+  ctx.restore();
+  dot(ctx, hx + (dx / l) * 3, hy + (dy / l) * 3, 6, s.skin, 2.2);
+}
+
+/** お菓子でいっぱいのかぼちゃのバケツ（x, y = バケツの中心。持ち手のてっぺんは y - 20） */
+function pumpkinBucket(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+  ctx.strokeStyle = ink();
+  ctx.lineWidth = 2.4 * lineK;
+  ctx.beginPath();
+  ctx.arc(x, y - 7, 13, Math.PI * 1.08, Math.PI * 1.92);
+  ctx.stroke();
+  for (const [dx, dy, c] of [[-9, -13, '#f2a7b6'], [0, -16, '#a9d8ef'], [8, -13, '#f8dc7a'], [-4, -11, '#bfe3a8'], [5, -10, '#f2a7b6']] as const) dot(ctx, x + dx, y + dy, 4, c, 1.6);
+  ctx.beginPath();
+  ctx.ellipse(x, y, 16, 12.5, 0, 0, Math.PI * 2);
+  fillStroke(ctx, vgrad(ctx, y - 13, y + 13, [PUMPKIN, PUMPKIN_SHADE]), 2.2);
+  ctx.strokeStyle = '#c96a32';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.ellipse(x, y, 7, 12, 0, -Math.PI / 2, Math.PI / 2, true);
+  ctx.moveTo(x, y - 12);
+  ctx.ellipse(x, y, 7, 12, 0, -Math.PI / 2, Math.PI / 2);
+  ctx.stroke();
+  // ジャック・オー・ランタンの顔
+  ctx.fillStyle = LINE;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(x + side * 3, y - 2);
+    ctx.lineTo(x + side * 9, y - 2);
+    ctx.lineTo(x + side * 6, y - 7);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.beginPath();
+  ctx.moveTo(x - 8, y + 3);
+  ctx.lineTo(x + 8, y + 3);
+  ctx.lineTo(x + 5, y + 8);
+  ctx.lineTo(x + 2.5, y + 5.5);
+  ctx.lineTo(x, y + 8);
+  ctx.lineTo(x - 2.5, y + 5.5);
+  ctx.lineTo(x - 5, y + 8);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// --- コミー（死神）: 白いロングヘアの猫耳に大きなドクロの飾り。フード付きの黒いローブ、袖口はピンク。ねじれた木の大鎌
+
+/** 頭の横に付ける大きなドクロ（眠たげな半目） */
+function skullOrnament(ctx: CanvasRenderingContext2D, x: number, y: number, rot: number): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rot);
+  ctx.beginPath();
+  ctx.roundRect(-10, 3, 20, 14, 5);
+  fillStroke(ctx, WHITE, 2.2);
+  ctx.beginPath();
+  ctx.ellipse(0, -3, 19, 15.5, 0, 0, Math.PI * 2);
+  fillStroke(ctx, WHITE, 2.4);
+  ctx.fillStyle = 'rgba(214, 200, 210, 0.6)';
+  ctx.beginPath();
+  ctx.ellipse(6, 4, 11, 6, -0.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = LINE;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.ellipse(side * 7.5, -1.5, 5.6, 5.2, 0, 0, Math.PI);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.beginPath();
+  ctx.moveTo(0, 6);
+  ctx.lineTo(-2.2, 9.6);
+  ctx.lineTo(2.2, 9.6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = ink();
+  ctx.lineWidth = 1.4 * lineK;
+  ctx.beginPath();
+  for (const dx of [-5, 0, 5]) {
+    ctx.moveTo(dx, 12.5);
+    ctx.lineTo(dx, 16.5);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** ねじれた木の柄の大鎌。刃は柄の下から左へ大きく反る */
+function scythe(ctx: CanvasRenderingContext2D): void {
+  ctx.beginPath();
+  ctx.moveTo(12, 106);
+  ctx.bezierCurveTo(-22, 116, -66, 108, -90, 70);
+  ctx.bezierCurveTo(-62, 94, -26, 100, 10, 95);
+  ctx.closePath();
+  fillStroke(ctx, vgrad(ctx, 70, 112, ['#d3d9db', '#a2abaf', '#808a8e']), 2.4);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(4, 99);
+  ctx.bezierCurveTo(-26, 103, -58, 97, -82, 75);
+  ctx.stroke();
+  const wood = '#8d5f45';
+  tube(ctx, [6, 52, 15, 84, 9, 116], 7, wood);
+  ctx.strokeStyle = '#6a4434';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(8, 76);
+  ctx.lineTo(13, 80);
+  ctx.moveTo(13, 92);
+  ctx.lineTo(8, 97);
+  ctx.moveTo(10, 106);
+  ctx.lineTo(14, 109);
+  ctx.stroke();
+  dot(ctx, 5, 51, 5.5, wood, 2.2);
+}
+
+function kommyReaperBody(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  // 床まで届く黒いローブ（裾はぼろぼろ）
+  ctx.beginPath();
+  ctx.moveTo(-20, 42);
+  ctx.quadraticCurveTo(-30, 62, -34, 86);
+  ctx.quadraticCurveTo(-38, 104, -44, 116);
+  for (const [x, y] of [[-32, 111], [-22, 117], [-10, 112], [2, 117], [14, 112], [26, 117], [36, 111], [44, 116]]) ctx.lineTo(x, y);
+  ctx.quadraticCurveTo(38, 104, 34, 86);
+  ctx.quadraticCurveTo(30, 62, 20, 42);
+  ctx.closePath();
+  fillStroke(ctx, sideShade(ctx, -44, 44, s.outfit, s.outfitShade));
+  ctx.strokeStyle = mix(s.outfitShade, LINE, 0.4);
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(-14, 72);
+  ctx.quadraticCurveTo(-18, 92, -22, 112);
+  ctx.moveTo(22, 78);
+  ctx.quadraticCurveTo(26, 94, 28, 110);
+  ctx.stroke();
+  // 首まわりに落としたフード
+  ctx.beginPath();
+  ctx.moveTo(-30, 46);
+  ctx.quadraticCurveTo(-34, 32, -18, 36);
+  ctx.quadraticCurveTo(0, 46, 18, 36);
+  ctx.quadraticCurveTo(34, 32, 30, 46);
+  ctx.quadraticCurveTo(0, 62, -30, 46);
+  ctx.closePath();
+  fillStroke(ctx, mix(s.outfit, '#ffffff', 0.1), 2.2);
+  scythe(ctx);
+  // 柄を胸の前で握る両手
+  bellArm(ctx, s, -1, 1, 60, s.outfit, s.collar);
+  bellArm(ctx, s, 1, 10, 70, s.outfit, s.collar);
+}
+
+// --- エルフィン（魔女）: 先の折れた大きな魔女の帽子（つばの裏は赤、小さな白い羽）、星のきらめく瞳。
+// 黒いワンピースに赤い襟と赤い宝石のブローチ、袖口と裾の裏地は赤。穂を上にしたほうき
+
+function witchHat(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  // 額の金の髪飾り（帽子のつばの下からのぞく）
+  crystal(ctx, -26, -36, 3, 5.5, GOLD, -0.4);
+  ctx.save();
+  ctx.translate(4, -60);
+  ctx.rotate(0.1);
+  // つば（手前の縁に赤い裏地がのぞく）
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 76, 19, 0, 0, Math.PI * 2);
+  fillStroke(ctx, WITCH_RED, 2.4);
+  ctx.beginPath();
+  ctx.ellipse(0, -3.5, 74, 15.5, 0, 0, Math.PI * 2);
+  ctx.fillStyle = s.hatColor;
+  ctx.fill();
+  // とんがり（先は右へ折れる）
+  ctx.beginPath();
+  ctx.moveTo(-38, -4);
+  ctx.bezierCurveTo(-30, -40, -14, -68, 8, -84);
+  ctx.bezierCurveTo(24, -96, 48, -94, 62, -78);
+  ctx.quadraticCurveTo(48, -74, 34, -70);
+  ctx.bezierCurveTo(30, -48, 36, -22, 40, -4);
+  ctx.quadraticCurveTo(0, 4, -38, -4);
+  ctx.closePath();
+  fillStroke(ctx, sideShade(ctx, -38, 40, mix(s.hatColor, '#ffffff', 0.08), mix(s.hatColor, LINE, 0.3), 0.58), 2.4);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.14)';
+  ctx.beginPath();
+  ctx.ellipse(-16, -40, 5, 18, 0.45, 0, Math.PI * 2);
+  ctx.fill();
+  // 赤い帯と金の星
+  ctx.beginPath();
+  ctx.moveTo(-37, -8);
+  ctx.quadraticCurveTo(0, 0, 39, -8);
+  ctx.lineTo(37.5, -16);
+  ctx.quadraticCurveTo(0, -8, -35.5, -16);
+  ctx.closePath();
+  fillStroke(ctx, WITCH_RED, 2);
+  star(ctx, -12, -9, 5.5, GOLD, 1.4);
+  // 小さな白い羽（妖精の女王のしるし）
+  ctx.translate(34, -36);
+  ctx.rotate(-0.5);
+  ctx.scale(0.5, 0.5);
+  const p = new Path2D();
+  p.moveTo(0, 2);
+  p.bezierCurveTo(6, -20, 30, -32, 46, -24);
+  p.quadraticCurveTo(53, -16, 42, -11);
+  p.quadraticCurveTo(49, -2, 37, 1);
+  p.quadraticCurveTo(41, 10, 27, 10);
+  p.quadraticCurveTo(14, 14, 0, 2);
+  ctx.fillStyle = WHITE;
+  ctx.fill(p);
+  ctx.strokeStyle = ink();
+  ctx.lineWidth = 4.4 * lineK;
+  ctx.stroke(p);
+  ctx.restore();
+}
+
+/** 穂を上にして立てたほうき（左手で柄を握る） */
+function broom(ctx: CanvasRenderingContext2D): void {
+  tube(ctx, [-36, 116, -56, -26], 4.6, '#b07e52');
+  ctx.save();
+  ctx.translate(-57, -24);
+  ctx.rotate(-0.13);
+  ctx.beginPath();
+  ctx.moveTo(-5, 0);
+  ctx.quadraticCurveTo(-17, -30, -15, -56);
+  ctx.quadraticCurveTo(0, -62, 15, -56);
+  ctx.quadraticCurveTo(17, -30, 5, 0);
+  ctx.closePath();
+  fillStroke(ctx, vgrad(ctx, -58, 0, ['#f7dc9e', '#e2b46a']), 2.2);
+  ctx.strokeStyle = '#c9934e';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  for (const dx of [-8, -3, 2, 7]) {
+    ctx.moveTo(dx * 0.3, -6);
+    ctx.quadraticCurveTo(dx * 1.1, -30, dx * 1.3, -52);
+  }
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.roundRect(-7, -7, 14, 6.5, 2);
+  fillStroke(ctx, WITCH_RED, 1.8);
+  ctx.restore();
+}
+
+function elfinWitchBody(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  broom(ctx);
+  // 裾からのぞく赤い裏地
+  ctx.beginPath();
+  ctx.moveTo(-36, 88);
+  ctx.lineTo(36, 88);
+  ctx.lineTo(41, 102);
+  ctx.quadraticCurveTo(0, 106, -41, 102);
+  ctx.closePath();
+  fillStroke(ctx, WITCH_RED, 2.2);
+  torsoPath(ctx, 38);
+  fillStroke(ctx, sideShade(ctx, -38, 38, s.outfit, s.outfitShade));
+  ctx.strokeStyle = GOLD;
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.moveTo(-35, 94.5);
+  ctx.quadraticCurveTo(0, 97, 35, 94.5);
+  ctx.stroke();
+  ctx.strokeStyle = mix(s.outfitShade, LINE, 0.4);
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(-10, 72);
+  ctx.quadraticCurveTo(-13, 84, -16, 94);
+  ctx.moveTo(12, 74);
+  ctx.quadraticCurveTo(15, 84, 18, 94);
+  ctx.stroke();
+  // 左手でほうきの柄を握り、右手は腰に
+  bellArm(ctx, s, -1, -38, 76, s.outfit, WITCH_RED);
+  bellArm(ctx, s, 1, 30, 76, s.outfit, WITCH_RED);
+  // 赤い襟と、金の縁の赤い宝石のブローチ
+  ctx.beginPath();
+  ctx.moveTo(-22, 43);
+  ctx.quadraticCurveTo(-36, 50, -31, 59);
+  ctx.quadraticCurveTo(-14, 56, 0, 63);
+  ctx.quadraticCurveTo(14, 56, 31, 59);
+  ctx.quadraticCurveTo(36, 50, 22, 43);
+  ctx.closePath();
+  fillStroke(ctx, sideShade(ctx, -36, 36, '#dc5f5f', '#c04d53', 0.66));
+  crystal(ctx, 0, 57, 6.5, 8, GOLD);
+  crystal(ctx, 0, 57, 3.6, 5, '#d23f4a');
+}
+
+// --- バター（ミイラ）: 頭に巻いた包帯と黄色いリボン、包帯でぐるぐるの体に大きな白いリボン。
+// 両手を上げて「がおー」。垂れ耳としっぽはそのまま
+
+function bandageWrap(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  const strip = (pts: number[], w: number) => {
+    tube(ctx, pts, w, '#fbf7ef');
+    ctx.save();
+    ctx.setLineDash([2.5, 4.5]);
+    ctx.strokeStyle = '#ddd1c0';
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(pts[0], pts[1]);
+    if (pts.length === 6) ctx.quadraticCurveTo(pts[2], pts[3], pts[4], pts[5]);
+    else ctx.lineTo(pts[2], pts[3]);
+    ctx.stroke();
+    ctx.restore();
+  };
+  // ほどけて垂れた端
+  ctx.beginPath();
+  ctx.moveTo(-54, -34);
+  ctx.quadraticCurveTo(-74, -26, -70, -6);
+  ctx.lineTo(-64, -10);
+  ctx.lineTo(-62, -2);
+  ctx.quadraticCurveTo(-62, -22, -50, -26);
+  ctx.closePath();
+  fillStroke(ctx, '#fbf7ef', 2);
+  strip([-58, -30, -8, -86, 50, -40], 8);
+  strip([-40, -58, 4, -46, 46, -62], 7.5);
+  bow(ctx, -30, -66, -0.35, 0.8, s.hatColor);
+}
+
+/** 包帯の手と、上へ向けた爪 */
+function paw(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+  ctx.strokeStyle = ink();
+  ctx.lineWidth = 1.8 * lineK;
+  ctx.beginPath();
+  for (const dx of [-4, 0, 4]) {
+    ctx.moveTo(x + dx - 1.4, y - 5);
+    ctx.lineTo(x + dx, y - 10.5);
+    ctx.lineTo(x + dx + 1.4, y - 5);
+  }
+  ctx.fillStyle = WHITE;
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(x, y, 7.5, 6.8, 0, 0, Math.PI * 2);
+  fillStroke(ctx, '#fbf7ef', 2.2);
+  ctx.strokeStyle = '#ddd1c0';
+  ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  ctx.moveTo(x - 6, y + 1);
+  ctx.lineTo(x + 6, y - 1);
+  ctx.stroke();
+}
+
+function butterMummyBody(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  const band = s.outfit;
+  const shade = s.outfitShade;
+  // 脚の包帯と黄色いリボン
+  ctx.strokeStyle = shade;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  for (const y of [100, 106, 111]) {
+    ctx.moveTo(-11, y + 1);
+    ctx.lineTo(11, y - 1);
+  }
+  ctx.stroke();
+  // 腰から垂れる黄色いリボンの輪
+  tube(ctx, [-18, 78, -50, 92, -36, 112], 3.2, RIBBON_YELLOW);
+  tube(ctx, [20, 82, 46, 100, 34, 112], 3.2, RIBBON_YELLOW);
+  // 包帯でぐるぐるの胴
+  torsoPath(ctx, 32);
+  ctx.fillStyle = sideShade(ctx, -32, 32, band, shade, 0.66);
+  ctx.fill();
+  ctx.save();
+  ctx.clip();
+  ctx.strokeStyle = shade;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  for (let i = 0; i < 7; i++) {
+    const y = 50 + i * 8;
+    const d = i % 2 ? 4 : -4;
+    ctx.moveTo(-40, y + d);
+    ctx.lineTo(40, y - d);
+  }
+  ctx.stroke();
+  ctx.restore();
+  torsoPath(ctx, 32);
+  ctx.strokeStyle = ink();
+  ctx.lineWidth = 2.4 * lineK;
+  ctx.stroke();
+  // ほどけた包帯の端
+  for (const [x, dx] of [[-24, -7], [16, 6]]) {
+    ctx.beginPath();
+    ctx.moveTo(x - 3.5, 95);
+    ctx.lineTo(x + 3.5, 95);
+    ctx.lineTo(x + 3.5 + dx, 108);
+    ctx.lineTo(x + dx, 105);
+    ctx.lineTo(x - 3.5 + dx, 109);
+    ctx.closePath();
+    fillStroke(ctx, band, 1.8);
+  }
+  bow(ctx, 20, 82, 0.2, 0.5, RIBBON_YELLOW);
+  bow(ctx, -7, 104, 0, 0.32, RIBBON_YELLOW);
+  bow(ctx, 0, 53, 0, 0.9, WHITE);
+  // がおー: ひじを曲げて両手を上げる
+  for (const side of [-1, 1]) {
+    tube(ctx, [side * 20, 48, side * 33, 70], 11, band);
+    tube(ctx, [side * 33, 70, side * 33, 56], 11, band);
+    paw(ctx, side * 33, 51);
+  }
+}
+
+// --- ヨミ（おばけ）: 薄いラベンダーの髪にぱっつん前髪と紺のカチューシャ、床まで届く二本の三つ編み。
+// 後ろに三日月の付いた金の飾り枠。胸におばけの顔の白いシーツ（裾と袖はぎざぎざ）、かぼちゃのバケツ
+
+function yomiHalo(ctx: CanvasRenderingContext2D): void {
+  const frame = () => {
+    ctx.beginPath();
+    ctx.moveTo(-60, -14);
+    ctx.lineTo(-66, -94);
+    ctx.quadraticCurveTo(-68, -124, -36, -124);
+    ctx.lineTo(36, -124);
+    ctx.quadraticCurveTo(68, -124, 66, -94);
+    ctx.lineTo(60, -14);
+  };
+  frame();
+  ctx.strokeStyle = ink();
+  ctx.lineWidth = 6 + 4.4 * lineK;
+  ctx.stroke();
+  frame();
+  ctx.strokeStyle = GOLD;
+  ctx.lineWidth = 6;
+  ctx.stroke();
+  // 角の渦巻き
+  for (const side of [-1, 1]) {
+    ctx.save();
+    ctx.translate(side * 46, -106);
+    ctx.scale(side, 1);
+    ctx.strokeStyle = ink();
+    ctx.lineWidth = 3 + 4 * lineK;
+    spiral(ctx, 0, 0, 9);
+    ctx.strokeStyle = GOLD;
+    ctx.lineWidth = 3;
+    spiral(ctx, 0, 0, 9);
+    ctx.restore();
+    dot(ctx, side * 66, -58, 4.5, GOLD, 2);
+    dot(ctx, side * 60, -14, 4, GOLD, 2);
+  }
+  // てっぺんの玉と三日月
+  dot(ctx, 0, -126, 9, GOLD, 2.2);
+  dot(ctx, -2, -128, 3.5, '#fff1cf', 0);
+  ctx.beginPath();
+  ctx.arc(0, -147, 10, Math.PI * 0.3, Math.PI * 1.7);
+  ctx.arc(5, -147, 8, Math.PI * 1.55, Math.PI * 0.45, true);
+  ctx.closePath();
+  fillStroke(ctx, GOLD, 2);
+}
+
+/** ヨミの片方の三つ編み（耳の後ろから床まで。先に紺のリボン） */
+function twinBraid(ctx: CanvasRenderingContext2D, s: ChibiSpec, side: number): void {
+  const [x0, y0, xc, yc, x1, y1] = [side * 50, 12, side * 66, 58, side * 58, 100];
+  ctx.strokeStyle = ink();
+  ctx.lineWidth = 10 + 4.5 * lineK;
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.quadraticCurveTo(xc, yc, x1, y1);
+  ctx.stroke();
+  ctx.strokeStyle = s.hair;
+  ctx.lineWidth = 10;
+  ctx.stroke();
+  ctx.strokeStyle = s.hairShade;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  for (let i = 0; i < 9; i++) {
+    const t = (i + 0.5) / 9.5;
+    const y = y0 * (1 - t) * (1 - t) + yc * 2 * t * (1 - t) + y1 * t * t;
+    const x = x0 * (1 - t) * (1 - t) + xc * 2 * t * (1 - t) + x1 * t * t;
+    const d = i % 2 ? 1 : -1;
+    ctx.moveTo(x - 5 * d, y - 3);
+    ctx.quadraticCurveTo(x, y - 1, x + 4 * d, y + 4);
+  }
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x1, y1 + 2);
+  ctx.quadraticCurveTo(x1 - 7, y1 + 10, x1 - 3, y1 + 16);
+  ctx.quadraticCurveTo(x1, y1 + 11, x1 + 4, y1 + 15);
+  ctx.quadraticCurveTo(x1 + 5, y1 + 8, x1, y1 + 2);
+  fillStroke(ctx, s.hairTip, 2);
+  bow(ctx, x1, y1, 0, 0.42, s.hatColor);
+}
+
+/** おばけのシーツの、ぼろぼろの垂れた袖。手は (hx, hy) */
+function ghostSleeve(ctx: CanvasRenderingContext2D, s: ChibiSpec, side: number, hx: number, hy: number): void {
+  dot(ctx, hx, hy, 6, s.skin, 2.2);
+  ctx.beginPath();
+  ctx.moveTo(side * 16, 44);
+  ctx.quadraticCurveTo(side * 34, 50, hx + side * 3, hy - 7);
+  ctx.lineTo(hx + side * 7, hy + 9);
+  ctx.lineTo(hx + side * 1, hy + 4);
+  ctx.lineTo(hx - side * 3, hy + 12);
+  ctx.lineTo(hx - side * 8, hy + 3);
+  ctx.quadraticCurveTo(side * 22, 68, side * 18, 58);
+  ctx.closePath();
+  fillStroke(ctx, sideShade(ctx, side * 14, hx + side * 8, s.outfit, s.outfitShade, 0.7), 2.2);
+}
+
+function yomiGhostBody(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  ctx.beginPath();
+  ctx.moveTo(-18, 42);
+  ctx.bezierCurveTo(-32, 52, -40, 80, -46, 104);
+  for (const [x, y] of [[-36, 98], [-27, 106], [-16, 99], [-5, 107], [6, 99], [18, 106], [30, 98], [46, 104]]) ctx.lineTo(x, y);
+  ctx.bezierCurveTo(40, 80, 32, 52, 18, 42);
+  ctx.closePath();
+  fillStroke(ctx, sideShade(ctx, -46, 46, s.outfit, s.outfitShade, 0.64));
+  // 胸のおばけの顔
+  ctx.fillStyle = '#2f2b3a';
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.ellipse(side * 8, 66, 3.2, 4.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.beginPath();
+  ctx.moveTo(-10, 74);
+  ctx.quadraticCurveTo(0, 86, 10, 74);
+  ctx.quadraticCurveTo(0, 79, -10, 74);
+  ctx.closePath();
+  ctx.fill();
+  ghostSleeve(ctx, s, -1, -33, 76);
+  // 右手でかぼちゃのバケツを提げる
+  pumpkinBucket(ctx, 42, 94);
+  ghostSleeve(ctx, s, 1, 40, 72);
+}
+
+// --- ジョアン（吸血鬼）: 深い緑の髪に、金の縁の黒い羽の飾りが二対。橙の葉の髪飾り、赤い瞳と小さな口。
+// 裏地が緑の黒いマント（裾はこうもりの羽の形）、白いブラウスに黒いリボンと緑の宝石、編み上げのコルセット、フリルのスカート、白いニーハイ
+
+function batWings(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  for (const side of [-1, 1]) {
+    for (const [dx, dy, rot, sc] of [[40, -48, -0.2, 0.7], [28, -62, -0.75, 1]]) {
+      ctx.save();
+      ctx.translate(side * dx, dy);
+      ctx.scale(side, 1);
+      ctx.rotate(rot);
+      ctx.scale(sc, sc);
+      const p = new Path2D();
+      p.moveTo(0, 4);
+      p.bezierCurveTo(6, -14, 24, -28, 50, -30);
+      p.quadraticCurveTo(42, -20, 44, -10);
+      p.quadraticCurveTo(34, -12, 30, -2);
+      p.quadraticCurveTo(20, -4, 16, 6);
+      p.quadraticCurveTo(8, 2, 0, 4);
+      p.closePath();
+      ctx.fillStyle = s.hatColor;
+      ctx.fill(p);
+      ctx.strokeStyle = GOLD;
+      ctx.lineWidth = 2.8 / sc;
+      ctx.beginPath();
+      ctx.moveTo(4, -3);
+      ctx.bezierCurveTo(10, -15, 26, -25, 45, -27.5);
+      ctx.stroke();
+      ctx.strokeStyle = ink();
+      ctx.lineWidth = (2.2 * lineK) / sc;
+      ctx.stroke(p);
+      ctx.restore();
+    }
+  }
+  // 片側の葉の髪飾り（緑の葉に燃えるような橙の縁）
+  for (const [x, y, a] of [[54, -26, 0.5], [58, -10, 1.1]]) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(a);
+    ctx.beginPath();
+    ctx.moveTo(0, -11);
+    ctx.quadraticCurveTo(8.5, -1, 0, 11);
+    ctx.quadraticCurveTo(-8.5, -1, 0, -11);
+    fillStroke(ctx, '#e3683f', 1.8);
+    ctx.beginPath();
+    ctx.moveTo(0, -6.5);
+    ctx.quadraticCurveTo(4.5, -1, 0, 6.5);
+    ctx.quadraticCurveTo(-4.5, -1, 0, -6.5);
+    ctx.fillStyle = '#4f9a6c';
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+/** 肩から羽織るマントの形（裾はこうもりの羽のように波打つ） */
+function capePath(): Path2D {
+  const p = new Path2D();
+  p.moveTo(-20, 40);
+  p.bezierCurveTo(-50, 48, -68, 78, -76, 110);
+  p.quadraticCurveTo(-66, 100, -54, 111);
+  p.quadraticCurveTo(-46, 100, -34, 109);
+  p.lineTo(34, 109);
+  p.quadraticCurveTo(46, 100, 54, 111);
+  p.quadraticCurveTo(66, 100, 76, 110);
+  p.bezierCurveTo(68, 78, 50, 48, 20, 40);
+  p.closePath();
+  return p;
+}
+
+function vampireCape(ctx: CanvasRenderingContext2D): void {
+  const p = capePath();
+  ctx.strokeStyle = ink();
+  ctx.lineWidth = 2.6 * lineK;
+  ctx.stroke(p);
+  ctx.fillStyle = CAPE_BLACK;
+  ctx.fill(p);
+  // 内側の緑の裏地
+  ctx.save();
+  ctx.translate(0, 8);
+  ctx.scale(0.8, 0.93);
+  ctx.fillStyle = vgrad(ctx, 40, 110, ['#2f5c4a', '#3f7a62']);
+  ctx.fill(p);
+  ctx.restore();
+  star(ctx, -62, 96, 3, GOLD);
+  star(ctx, 64, 94, 2.6, GOLD);
+}
+
+function joanneVampireBody(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  // フリルのペチコート（2 段）
+  for (const [y, c] of [[98, '#56635c'], [91, '#39433e']] as const) {
+    ctx.beginPath();
+    ctx.moveTo(-34, y - 9);
+    ctx.lineTo(34, y - 9);
+    ctx.lineTo(37, y);
+    for (let i = 0; i < 8; i++) {
+      const x0 = 37 - (74 / 8) * i;
+      const x1 = x0 - 74 / 8;
+      ctx.quadraticCurveTo((x0 + x1) / 2, y + 6, x1, y);
+    }
+    ctx.closePath();
+    fillStroke(ctx, c, 2);
+  }
+  // 黒いスカート
+  ctx.beginPath();
+  ctx.moveTo(-23, 70);
+  ctx.quadraticCurveTo(-29, 80, -34, 88);
+  ctx.quadraticCurveTo(0, 93, 34, 88);
+  ctx.quadraticCurveTo(29, 80, 23, 70);
+  ctx.closePath();
+  fillStroke(ctx, sideShade(ctx, -34, 34, '#3a3541', '#2a2630'));
+  // 白いブラウス
+  ctx.beginPath();
+  ctx.moveTo(-19, 42);
+  ctx.quadraticCurveTo(-26, 56, -24, 72);
+  ctx.lineTo(24, 72);
+  ctx.quadraticCurveTo(26, 56, 19, 42);
+  ctx.closePath();
+  fillStroke(ctx, sideShade(ctx, -26, 26, s.outfit, s.outfitShade));
+  // 黒いコルセットと白い編み上げ
+  ctx.beginPath();
+  ctx.moveTo(-22, 60);
+  ctx.quadraticCurveTo(0, 56, 22, 60);
+  ctx.lineTo(24, 74);
+  ctx.quadraticCurveTo(0, 78, -24, 74);
+  ctx.closePath();
+  fillStroke(ctx, '#3a3541', 2);
+  ctx.strokeStyle = WHITE;
+  ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  for (const y of [61, 66.5]) {
+    ctx.moveTo(-3, y);
+    ctx.lineTo(3, y + 4.5);
+    ctx.moveTo(3, y);
+    ctx.lineTo(-3, y + 4.5);
+  }
+  ctx.stroke();
+  // 左手は下ろし、右手は手のひらを見せて横へ
+  arm(ctx, s, -1, -30, 77, s.outfit, WHITE);
+  arm(ctx, s, 1, 42, 62, s.outfit, WHITE);
+  // マントの襟
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(side * 16, 41);
+    ctx.quadraticCurveTo(side * 30, 34, side * 36, 46);
+    ctx.quadraticCurveTo(side * 26, 47, side * 19, 52);
+    ctx.closePath();
+    fillStroke(ctx, CAPE_BLACK, 2);
+  }
+  bow(ctx, 0, 49, 0, 0.6, CAPE_BLACK);
+  crystal(ctx, 0, 49, 3.4, 4.2, '#4fb08a');
+}
+
+// --- スピッキー（立ち姿）: ネルのまねをしたシスター服。黒いワンピースに白い襟とオレンジの蝶ネクタイ、
+// ラベンダーのフリル、腰にドクロの仮面。左手にかぼちゃのバケツ、右手に十字の杖
+
+function crossStaff(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number): void {
+  tube(ctx, [x0, y0, x1, y1], 4.2, '#c8c4cf');
+  dot(ctx, x0, y0, 3.4, '#c8c4cf', 1.8);
+  dot(ctx, x1, y1, 12, '#3f3756', 2.4);
+  ctx.strokeStyle = '#c8c4cf';
+  ctx.lineWidth = 2.6;
+  ctx.beginPath();
+  ctx.arc(x1, y1, 8, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = WHITE;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1 - 11);
+  ctx.lineTo(x1, y1 + 11);
+  ctx.moveTo(x1 - 11, y1);
+  ctx.lineTo(x1 + 11, y1);
+  ctx.stroke();
+  dot(ctx, x1, y1, 3.2, PUMPKIN, 1.4);
+}
+
+function spikeyBody(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  crossStaff(ctx, 38, 116, 44, -30);
+  ctx.beginPath();
+  ctx.moveTo(-36, 88);
+  ctx.lineTo(36, 88);
+  ctx.lineTo(40, 101);
+  ctx.quadraticCurveTo(0, 105, -40, 101);
+  ctx.closePath();
+  fillStroke(ctx, sideShade(ctx, -40, 40, LAVENDER, LAVENDER_SHADE), 2);
+  for (let x = -36; x <= 36; x += 6) dot(ctx, x, 102, 2.6, LACE, 1.2);
+  torsoPath(ctx, 36);
+  fillStroke(ctx, sideShade(ctx, -36, 36, s.outfit, s.outfitShade));
+  star(ctx, -24, 88, 2.6, GOLD);
+  star(ctx, 22, 85, 2.4, GOLD);
+  skull(ctx, -21, 76, 1.1);
+  ctx.beginPath();
+  ctx.moveTo(-17, 44);
+  ctx.quadraticCurveTo(-24, 50, -18, 56);
+  ctx.quadraticCurveTo(-8, 57, 0, 50);
+  ctx.quadraticCurveTo(8, 57, 18, 56);
+  ctx.quadraticCurveTo(24, 50, 17, 44);
+  ctx.closePath();
+  fillStroke(ctx, WHITE, 2);
+  bow(ctx, 0, 52, 0, 0.5, PUMPKIN);
+  arm(ctx, s, -1, -36, 71, s.outfit, WHITE);
+  arm(ctx, s, 1, 40, 60, s.outfit, WHITE);
+  pumpkinBucket(ctx, -38, 94);
+}
+
+// ------------------------------------------------------------------ props
+
+function prop(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
+  switch (s.extra) {
+    case 'elfin': {
+      // 金の輪に結晶をはめた王笏
+      tube(ctx, [48, 116, 56, -34], 4.5, WHITE);
+      ctx.strokeStyle = GOLD;
+      ctx.lineWidth = 4.5;
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const t0 = i / 6 + 0.04;
+        const t1 = t0 + 0.06;
+        ctx.moveTo(48 + 8 * t0, 116 - 150 * t0);
+        ctx.lineTo(48 + 8 * t1, 116 - 150 * t1);
+      }
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(57, -50, 15, 0, Math.PI * 2);
+      ctx.fillStyle = WHITE;
+      ctx.fill();
+      ctx.strokeStyle = ink();
+      ctx.lineWidth = 5 + 4 * lineK;
+      ctx.stroke();
+      ctx.strokeStyle = GOLD;
+      ctx.lineWidth = 5;
+      ctx.stroke();
+      crystal(ctx, 57, -50, 6, 10, '#ae95bc');
+      crystal(ctx, 51, -46, 3.4, 6, '#c6dae4', -0.4);
+      crystal(ctx, 63, -46, 3.4, 6, '#c6dae4', 0.4);
+      break;
+    }
+    case 'nell': {
+      // 斧（車輪模様の金の刃と三日月の刃）
+      tube(ctx, [-30, 74, -62, 110], 4.5, '#c8c4c5');
+      ctx.beginPath();
+      ctx.moveTo(-66, 92);
+      ctx.quadraticCurveTo(-88, 100, -82, 118);
+      ctx.quadraticCurveTo(-74, 106, -60, 106);
+      ctx.closePath();
+      fillStroke(ctx, '#d9dadf', 2.2);
+      dot(ctx, -58, 104, 9, '#e6b15b', 2.2);
+      ctx.strokeStyle = ink();
+      ctx.lineWidth = 1.5 * lineK;
+      ctx.beginPath();
+      for (let i = 0; i < 4; i++) {
+        const a = (i * Math.PI) / 4;
+        ctx.moveTo(-58 + Math.cos(a) * 7, 104 + Math.sin(a) * 7);
+        ctx.lineTo(-58 - Math.cos(a) * 7, 104 - Math.sin(a) * 7);
+      }
+      ctx.stroke();
+      break;
+    }
+    case 'eshur':
+      // 指示棒
+      tube(ctx, [42, 68, 80, 30], 3.2, '#6d5f66');
+      dot(ctx, 80, 30, 3, WHITE, 1.6);
+      break;
+    case 'speaki': {
+      // お菓子でいっぱいのかぼちゃのバケツ（しゃがんでいる時は横の床に置く）
+      ctx.save();
+      if (s.crouch) ctx.translate(20, FLOOR - 116);
+      pumpkinBucket(ctx, 40, 103);
+      ctx.restore();
+      break;
+    }
+  }
+}
+
+// ------------------------------------------------------------------ face
+
+/**
+ * もち顔の輪郭。こめかみは細く、ほっぺ（頬紅）の高さでいちばん横へふくらみ、
+ * あごは丸く広い（つきたてのおもちが少しだれたような下ぶくれ）
+ */
+function facePath(w: number, b: number): Path2D {
+  const p = new Path2D();
+  p.moveTo(-44, -38);
+  p.bezierCurveTo(-51, -26, -(w - 3), -4, -w, 24);
+  p.bezierCurveTo(-(w + 1), 42, -38, b, 0, b);
+  p.bezierCurveTo(38, b, w + 1, 42, w, 24);
+  p.bezierCurveTo(w - 3, -4, 51, -26, 44, -38);
+  p.quadraticCurveTo(0, -58, -44, -38);
+  p.closePath();
+  return p;
+}
+
+interface FaceGeom {
+  path: Path2D;
+  turn: -1 | 1;
+  /** 向いた側の、輪郭の外へ張り出したほっぺ */
+  bulge: { x: number; y: number; rx: number; ry: number };
+  /** 頬紅 [向いた側, 反対側] */
+  blush: { x: number; y: number; sc: number }[];
+}
+
+function faceGeom(s: ChibiSpec, pose: ChibiPose): FaceGeom {
+  const puffed = pose.expr === 'angry' || pose.expr === 'sulk';
+  const wob = pose.wobble ?? 0;
+  const w = (puffed ? 53 : 50) + wob * 4;
+  const b = (puffed ? 49 : 47) + Math.abs(wob) * 2;
+  const turn = pose.turn ?? 1;
+  const sc = puffed ? 1.12 : 1;
+  // モブは目が無いぶん、頬を前髪のすぐ下まで上げる
+  const by = s.mob ? -8 : 0;
+  const bulge = { x: turn * (42 + wob * 3 + (puffed ? 2 : 0)), y: 29 + Math.abs(wob), rx: 20 + (puffed ? 2 : 0), ry: 16 + Math.abs(wob) * 2 };
+  return {
+    path: facePath(w, b),
+    turn,
+    bulge,
+    // 向いた側は 3/4 向きで手前に来るぶん外へ、反対側は少し内へ
+    blush: [
+      { x: bulge.x - turn * 7, y: CHEEK.y + Math.abs(wob) + by, sc: sc * 1.05 },
+      { x: -turn * (CHEEK.x - 2 + wob * 3), y: CHEEK.y + by, sc },
+    ],
+  };
+}
+
+function face(ctx: CanvasRenderingContext2D, s: ChibiSpec, g: FaceGeom, sway: number, bare: boolean): void {
+  // 外側だけ線が見えるよう、太く引いてから塗る
+  if (!bare) {
+    ctx.strokeStyle = ink();
+    ctx.lineWidth = FACE_LINE * 2 * lineK;
+    ctx.stroke(g.path);
+  }
+  ctx.fillStyle = s.skin;
+  ctx.fill(g.path);
+
+  // 前髪の落とす影
+  ctx.save();
+  ctx.clip(g.path);
+  ctx.translate(0, 5);
+  ctx.fillStyle = 'rgba(226, 150, 150, 0.32)';
+  swayed(ctx, sway * BANG_SWAY, BANG_TOP, () => ctx.fill(bangsPath(s)));
+  ctx.restore();
+
+  for (const b of g.blush) cheekBlush(ctx, s, b.x, b.y, b.sc);
+}
+
+/**
+ * 向いた側のほっぺを輪郭の外へ丸く張り出させる（原作の「もちほっぺ」）。
+ * 横の髪より手前・前髪より奥に、顔の輪郭の外にはみ出した分だけを描く。
+ */
+function cheekBulge(ctx: CanvasRenderingContext2D, s: ChibiSpec, g: FaceGeom, bare: boolean): void {
+  const c = g.bulge;
+  ctx.save();
+  const outside = new Path2D();
+  outside.rect(-300, -300, 600, 600);
+  outside.addPath(g.path);
+  ctx.clip(outside, 'evenodd');
+  ctx.beginPath();
+  ctx.ellipse(c.x, c.y, c.rx, c.ry, 0, 0, Math.PI * 2);
+  ctx.fillStyle = s.skin;
+  ctx.fill();
+  if (!bare) {
+    ctx.strokeStyle = ink();
+    ctx.lineWidth = FACE_LINE * lineK;
+    ctx.stroke();
+  }
+  const b = g.blush[0];
+  cheekBlush(ctx, s, b.x, b.y, b.sc);
+  ctx.restore();
+}
+
+function cheekBlush(ctx: CanvasRenderingContext2D, s: ChibiSpec, x: number, y: number, sc: number): void {
+  if (s.mob) mobBlush(ctx, x, y, sc);
+  else blush(ctx, x, y, sc);
+}
+
+/** モブの頬: 名前のある子と同じ平たいピンクの丸を少し大きく描き、白いつやを 1 つ足す（にじませると絵柄が浮く） */
+function mobBlush(ctx: CanvasRenderingContext2D, x: number, y: number, sc: number): void {
+  ctx.fillStyle = BLUSH;
+  ctx.beginPath();
+  ctx.ellipse(x, y, 13.5 * sc, 12 * sc, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.beginPath();
+  ctx.ellipse(x - 3.5 * sc, y - 4.5 * sc, 2.8 * sc, 2.2 * sc, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/** 原作の SD の頬: 大きな平たいピンクの丸 */
+function blush(ctx: CanvasRenderingContext2D, x: number, y: number, sc: number): void {
+  ctx.fillStyle = BLUSH;
+  ctx.beginPath();
+  ctx.ellipse(x, y, 12.5 * sc, 11 * sc, 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/** 原作の SD の目: 縦長の焦げ茶の楕円と、目尻の上のまつ毛 1 本。半目や怒り目はまぶたの線で上を切る */
+function eyes(ctx: CanvasRenderingContext2D, s: ChibiSpec, pose: ChibiPose): void {
+  if (s.mob) return;
+  const e = pose.expr;
+  for (const side of [-1, 1]) {
+    const x = side * EYE_POS.x;
+    const y = EYE_POS.y;
+    ctx.strokeStyle = eyeInk();
+    ctx.fillStyle = eyeInk();
+    ctx.lineWidth = 3 * lineK;
+
+    // スピキは引っぱられても「> <」にせず、うるうるの目のまま
+    if (e === 'pinched' && s.extra !== 'speaki') {
+      pinchedEye(ctx, x, y, side);
+      continue;
+    }
+    if (e === 'munch') {
+      ctx.beginPath();
+      ctx.moveTo(x + side * 5, y - 7);
+      ctx.lineTo(x - side * 4, y);
+      ctx.lineTo(x + side * 5, y + 7);
+      ctx.stroke();
+      continue;
+    }
+    if (e === 'dizzy') {
+      ctx.lineWidth = 2.4 * lineK;
+      spiral(ctx, x, y, 8);
+      continue;
+    }
+    if (e === 'sleep' || (pose.blink && e !== 'surprised')) {
+      ctx.beginPath();
+      ctx.moveTo(x - 6, y + 2);
+      ctx.quadraticCurveTo(x, y + 6.5, x + 6, y + 2);
+      ctx.stroke();
+      continue;
+    }
+    if (s.extra === 'speaki') {
+      speakiEye(ctx, x, y + 1, side, e);
+      continue;
+    }
+    if (e === 'surprised') {
+      ctx.beginPath();
+      ctx.ellipse(x, y, 6.6, 8.2, 0, 0, Math.PI * 2);
+      fillStroke(ctx, WHITE, 2.4, eyeInk());
+      ctx.beginPath();
+      ctx.ellipse(x, y + 1, 2.7, 3.3, 0, 0, Math.PI * 2);
+      ctx.fillStyle = eyeInk();
+      ctx.fill();
+      continue;
+    }
+
+    // まぶたの線 [目頭の y, 目尻の y]
+    let lid: [number, number] | null = null;
+    if (s.halfLid || e === 'sulk' || e === 'stern') lid = [y - 1.5, y - 1.5];
+    if (e === 'angry') lid = [y - 0.5, y - 7];
+    ctx.save();
+    if (lid) {
+      ctx.beginPath();
+      ctx.moveTo(x - side * 8, lid[0]);
+      ctx.lineTo(x + side * 8, lid[1]);
+      ctx.lineTo(x + side * 8, y + 13);
+      ctx.lineTo(x - side * 8, y + 13);
+      ctx.closePath();
+      ctx.clip();
+    }
+    const ry = e === 'happy' ? EYE_POS.ry + 0.5 : EYE_POS.ry;
+    ctx.beginPath();
+    if (s.eyeColor) {
+      // 色のある瞳: 上は焦げ茶、下へ行くほど瞳の色。白い光を 2 つ
+      const rx = EYE_POS.rx + 0.8;
+      ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fillStyle = vgrad(ctx, y - ry, y + ry, [EYE, mix(EYE, s.eyeColor, 0.55), s.eyeColor, mix(s.eyeColor, '#ffffff', 0.25)]);
+      ctx.fill();
+      ctx.strokeStyle = eyeInk();
+      ctx.lineWidth = 1.4 * lineK;
+      ctx.stroke();
+      if (s.starEyes) sparkle(ctx, x, y + 1.5, 4.6);
+      else discs(ctx, [[x - 1.6, y - 3.8, 2]], WHITE);
+      discs(ctx, [[x + 1.8, y + 4.4, 1]], WHITE);
+    } else {
+      ctx.ellipse(x, y, EYE_POS.rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    ctx.lineWidth = 2.4 * lineK;
+    ctx.beginPath();
+    if (lid) {
+      ctx.moveTo(x - side * 6.8, lid[0]);
+      ctx.lineTo(x + side * 6.8, lid[1]);
+      ctx.lineTo(x + side * 9.6, lid[1] - 2.8);
+    } else {
+      // 目尻の上のまつ毛（短い 2 本）
+      ctx.moveTo(x + side * 3.4, y - 7.6);
+      ctx.lineTo(x + side * 7.4, y - 10);
+      ctx.moveTo(x + side * 4.9, y - 5.2);
+      ctx.lineTo(x + side * 8.4, y - 6.4);
+    }
+    ctx.stroke();
+  }
+}
+
+/** ほっぺを引っぱられた目: ぎゅっとつぶった「>」「<」（くの字が顔の内側を向く） */
+function pinchedEye(ctx: CanvasRenderingContext2D, x: number, y: number, side: number): void {
+  ctx.lineWidth = 3.2 * lineK;
+  ctx.beginPath();
+  ctx.moveTo(x + side * 5, y - 6.5);
+  ctx.lineTo(x - side * 4.5, y);
+  ctx.lineTo(x + side * 5, y + 5.5);
+  ctx.stroke();
+}
+
+/** 目尻の涙のつぶ（目の中心 x, y） */
+function tear(ctx: CanvasRenderingContext2D, x: number, y: number, side: number): void {
+  ctx.beginPath();
+  ctx.moveTo(x + side * 8.5, y + 3);
+  ctx.quadraticCurveTo(x + side * 11.5, y + 8, x + side * 9.5, y + 10);
+  ctx.quadraticCurveTo(x + side * 6.5, y + 9.5, x + side * 8.5, y + 3);
+  ctx.closePath();
+  fillStroke(ctx, '#bfe6fb', 1.4, '#6aa9d0');
+}
+
+function brows(ctx: CanvasRenderingContext2D, s: ChibiSpec, e: Expr): void {
+  if (s.mob) return;
+  if (s.extra === 'speaki') {
+    speakiBrows(ctx, s, e);
+    return;
+  }
+  const mood = e === 'angry' || e === 'worried' || e === 'sulk';
+  if (!mood) return;
+  ctx.strokeStyle = s.brows ?? mix(s.hairShade, LINE, 0.5);
+  ctx.lineWidth = 3.4 * lineK;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    if (e === 'angry') {
+      ctx.moveTo(side * 9, -4);
+      ctx.lineTo(side * 27, -12);
+    } else if (e === 'worried') {
+      ctx.moveTo(side * 8, -11);
+      ctx.lineTo(side * 25, -5);
+    } else if (e === 'sulk') {
+      ctx.moveTo(side * 10, -7);
+      ctx.lineTo(side * 26, -10);
+    } else {
+      ctx.moveTo(side * 12, -9);
+      ctx.quadraticCurveTo(side * 20, -14, side * 30, -11);
+    }
+    ctx.stroke();
+  }
+}
+
+function mouth(ctx: CanvasRenderingContext2D, s: ChibiSpec, pose: ChibiPose): void {
+  if (s.mob) {
+    mobMouth(ctx, s, pose.expr);
+    return;
+  }
+  const e = pose.expr;
+  if (s.extra === 'speaki' && speakiMouth(ctx, e)) return;
+  const kind = e === 'normal' || e === 'smile' ? s.mouth : e === 'happy' ? (s.mouth === 'fang' ? 'fangBig' : 'big') : e;
+  ctx.strokeStyle = ink();
+  ctx.lineWidth = 2.2 * lineK;
+  const open = (w: number, top: number, bottom: number, fang: boolean) => {
+    // 輪郭は Path2D で持つ（舌を描いたあとの現在パスは舌の楕円なので、そのまま stroke すると口の下に丸が出る）
+    const lip = new Path2D();
+    lip.moveTo(-w, top - 1);
+    lip.quadraticCurveTo(0, top + 1.5, w, top - 1);
+    lip.quadraticCurveTo(w * 0.85, bottom, 0, bottom);
+    lip.quadraticCurveTo(-w * 0.85, bottom, -w, top - 1);
+    lip.closePath();
+    ctx.fillStyle = MOUTH;
+    ctx.fill(lip);
+    ctx.save();
+    ctx.clip(lip);
+    ctx.fillStyle = TONGUE;
+    ctx.beginPath();
+    ctx.ellipse(0.5, bottom, w * 0.6, (bottom - top) * 0.42, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.stroke(lip);
+    if (fang) {
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.8, top - 0.3);
+      ctx.lineTo(-w * 0.2, top + 0.6);
+      ctx.lineTo(-w * 0.55, top + 4.8);
+      ctx.closePath();
+      fillStroke(ctx, '#ffffff', 1.2);
+    }
+  };
+  switch (kind) {
+    case 'fang':
+      open(7.5, 28, 35.5, true);
+      return;
+    case 'fangBig':
+      open(8.5, 27, 38.5, true);
+      return;
+    case 'open':
+      open(8, 28, 35, false);
+      return;
+    case 'big':
+      open(8.5, 27, 38.5, false);
+      return;
+    case 'cat':
+      ctx.beginPath();
+      ctx.moveTo(-6, 28.5);
+      ctx.quadraticCurveTo(-3, 33, 0, 29.5);
+      ctx.quadraticCurveTo(3, 33, 6, 28.5);
+      ctx.stroke();
+      return;
+    case 'o':
+      ctx.beginPath();
+      ctx.ellipse(0, 31, 2.8, 3.4, 0, 0, Math.PI * 2);
+      fillStroke(ctx, MOUTH, 2);
+      return;
+    case 'smirk':
+      ctx.beginPath();
+      ctx.moveTo(-5, 29.5);
+      ctx.quadraticCurveTo(-1, 33, 5, 28.5);
+      ctx.stroke();
+      return;
+    case 'surprised':
+    case 'dizzy':
+      ctx.beginPath();
+      ctx.ellipse(0, 31, 4.5, 5.5, 0, 0, Math.PI * 2);
+      fillStroke(ctx, MOUTH, 2.2);
+      return;
+    case 'pinched':
+      pinchedMouth(ctx);
+      return;
+    case 'munch': {
+      const o = Math.abs(Math.sin(pose.t * 14));
+      ctx.beginPath();
+      ctx.ellipse(0, 31, 6, 2 + o * 4.5, 0, 0, Math.PI * 2);
+      fillStroke(ctx, MOUTH, 2.2);
+      if (s.mouth === 'fang') {
+        ctx.beginPath();
+        ctx.moveTo(-4.4, 29.5 - o * 4);
+        ctx.lineTo(-1.6, 29.5 - o * 4);
+        ctx.lineTo(-3, 33 - o * 4);
+        ctx.closePath();
+        fillStroke(ctx, '#ffffff', 1.2);
+      }
+      return;
+    }
+    case 'sulk':
+      // とがらせた口（「3」）
+      ctx.beginPath();
+      ctx.moveTo(-1.5, 27);
+      ctx.quadraticCurveTo(4.5, 27.5, 1.5, 30.5);
+      ctx.quadraticCurveTo(5, 34, -1, 34.5);
+      ctx.stroke();
+      return;
+    case 'angry':
+      ctx.beginPath();
+      ctx.moveTo(-6, 32);
+      ctx.quadraticCurveTo(-3, 28, 0, 31);
+      ctx.quadraticCurveTo(3, 28, 6, 32);
+      ctx.stroke();
+      return;
+    case 'worried':
+      ctx.beginPath();
+      ctx.moveTo(-6, 32);
+      ctx.quadraticCurveTo(0, 27, 6, 32);
+      ctx.stroke();
+      return;
+    default:
+      ctx.beginPath();
+      ctx.moveTo(-5, 29);
+      ctx.quadraticCurveTo(0, 33.5, 5, 29);
+      ctx.stroke();
+  }
+}
+
+/** ほっぺを引っぱられてわめく口: 上がわなわな波打つ、横に広い開いた口と舌 */
+function pinchedMouth(ctx: CanvasRenderingContext2D): void {
+  const lip = new Path2D();
+  lip.moveTo(-8, 28);
+  for (let i = 1; i <= 4; i++) lip.quadraticCurveTo(-8 + (i - 0.5) * 4, 28 + (i % 2 ? -1.8 : 1.8), -8 + i * 4, 28);
+  lip.bezierCurveTo(9, 33, 5.5, 37.5, 0, 37.5);
+  lip.bezierCurveTo(-5.5, 37.5, -9, 33, -8, 28);
+  lip.closePath();
+  ctx.fillStyle = MOUTH;
+  ctx.fill(lip);
+  ctx.save();
+  ctx.clip(lip);
+  ctx.fillStyle = TONGUE;
+  ctx.beginPath();
+  ctx.ellipse(0, 38, 5, 3.6, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = ink();
+  ctx.lineWidth = 2.2 * lineK;
+  ctx.stroke(lip);
+}
+
+/** モブの小さな口（目が見えないぶん、口の形で表情を出す） */
+function mobMouth(ctx: CanvasRenderingContext2D, s: ChibiSpec, e: Expr): void {
+  const y = 32;
+  ctx.strokeStyle = ink();
+  ctx.lineWidth = 2 * lineK;
+  ctx.beginPath();
+  switch (e) {
+    case 'happy':
+      // 小さな三角の開いた口
+      ctx.moveTo(-4.5, y - 2.5);
+      ctx.quadraticCurveTo(0, y - 1.5, 4.5, y - 2.5);
+      ctx.quadraticCurveTo(1.5, y + 4.5, 0, y + 4.5);
+      ctx.quadraticCurveTo(-1.5, y + 4.5, -4.5, y - 2.5);
+      fillStroke(ctx, MOUTH, 2);
+      return;
+    case 'worried':
+    case 'pinched':
+      // 上がぎざぎざの、わなわなした口
+      ctx.moveTo(-7, y);
+      for (let i = 1; i <= 6; i++) ctx.lineTo(-7 + i * (14 / 6), y + (i % 2 ? -1.6 : 0));
+      ctx.quadraticCurveTo(6, y + 7, 0, y + 7);
+      ctx.quadraticCurveTo(-6, y + 7, -7, y);
+      fillStroke(ctx, MOUTH, 2);
+      return;
+    case 'surprised':
+    case 'dizzy':
+      ctx.ellipse(0, y + 1, 2.6, 3.2, 0, 0, Math.PI * 2);
+      fillStroke(ctx, MOUTH, 1.8);
+      return;
+    case 'angry':
+    case 'sulk':
+    case 'stern':
+      ctx.moveTo(-5, y + 2);
+      ctx.quadraticCurveTo(0, y - 3, 5, y + 2);
+      ctx.stroke();
+      return;
+    default:
+      if (s.mouth === 'open') {
+        // ω の口
+        ctx.moveTo(-5, y - 1.5);
+        ctx.quadraticCurveTo(-2.5, y + 2.5, 0, y);
+        ctx.quadraticCurveTo(2.5, y + 2.5, 5, y - 1.5);
+      } else {
+        ctx.moveTo(-4.5, y - 1);
+        ctx.quadraticCurveTo(0, y + 3.5, 4.5, y - 1);
+      }
+      ctx.stroke();
+  }
+}
+
+/** 小さなハート（モブがうれしい時） */
+function heart(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.beginPath();
+  ctx.moveTo(0, 7);
+  ctx.bezierCurveTo(-11, -1, -6, -10, 0, -4);
+  ctx.bezierCurveTo(6, -10, 11, -1, 0, 7);
+  ctx.closePath();
+  ctx.fillStyle = '#f2606e';
+  ctx.fill();
+  ctx.restore();
+}
+
+function angerMark(ctx: CanvasRenderingContext2D, t: number): void {
+  const s = 1 + Math.sin(t * 10) * 0.12;
+  ctx.save();
+  ctx.translate(44, -46);
+  ctx.scale(s, s);
+  ctx.strokeStyle = '#e2574c';
+  ctx.lineWidth = 3.5 * lineK;
+  for (const [ax, ay] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    ctx.beginPath();
+    ctx.moveTo(ax * 3, ay * 10);
+    ctx.quadraticCurveTo(ax * 3, ay * 3, ax * 10, ay * 3);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
+ * スピキの目: 黒目がちの大きな丸い目に、大きな光と細かいきらめき。下まぶたには今にもこぼれそうな涙の粒（うるうる）。
+ * 困り顔では涙が頬を流れる
+ */
+function speakiEye(ctx: CanvasRenderingContext2D, x: number, y: number, side: number, e: Expr): void {
+  const wide = e === 'surprised';
+  const rx = wide ? 9.4 : 8.8;
+  const ry = wide ? 10.4 : 9.8;
+  const water = (y0: number, y1: number) => vgrad(ctx, y0, y1, [WHITE, WHITE, '#d3edf9']);
+  if (e === 'worried') {
+    ctx.beginPath();
+    ctx.moveTo(x - 4, y + 6);
+    ctx.bezierCurveTo(x - 5, y + 16, x - 2.5, y + 24, x - 4.5, y + 33);
+    ctx.lineTo(x + 3.5, y + 33);
+    ctx.bezierCurveTo(x + 5.5, y + 24, x + 3, y + 16, x + 4, y + 6);
+    ctx.closePath();
+    fillStroke(ctx, 'rgba(173, 222, 245, 0.92)', 1.6, '#5aa6c8');
+  }
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+  fillStroke(ctx, vgrad(ctx, y - ry, y + ry, ['#2b161c', '#3a1f25', '#6e3d39']), 2.2, EYE);
+  discs(ctx, [[x - 2.8, y - 3.8, 3.6], [x + 3.8, y + 1.2, 1.5]], WHITE);
+  discs(ctx, [[x + 3, y - 6, 0.9], [x - 5.2, y + 1.5, 0.8], [x + 5.6, y - 2.2, 0.7], [x - 0.8, y + 3.6, 0.7]], 'rgba(255, 255, 255, 0.6)');
+  // 下まぶたにたまった涙の粒。縁を太く引いてから塗り、粒どうしの境目の線を消す
+  const pool = [[x + side * 5.4, y + 7.4, 3.6], [x + side * 0.4, y + 9.4, 3], [x - side * 4.6, y + 8.3, 2.3]];
+  ctx.strokeStyle = EYE;
+  ctx.lineWidth = 3 * lineK;
+  for (const [cx, cy, r] of pool) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  discs(ctx, pool, water(y + 4, y + 12.5));
+  discs(ctx, [[x + side * 4.4, y + 6.2, 1]], WHITE);
+  // 片方の目からひとしずく
+  if (side < 0 && e !== 'worried') {
+    const tx = x + 1.5;
+    const ty = y + 13;
+    ctx.beginPath();
+    ctx.moveTo(tx, ty);
+    ctx.bezierCurveTo(tx + 3.8, ty + 4.2, tx + 3.8, ty + 8.5, tx, ty + 8.5);
+    ctx.bezierCurveTo(tx - 3.8, ty + 8.5, tx - 3.8, ty + 4.2, tx, ty);
+    ctx.closePath();
+    fillStroke(ctx, water(ty, ty + 8.5), 1.6, EYE);
+  }
+}
+
+/**
+ * スピキの口: 縦長の卵形に大きく開けた口（中はほとんどピンク）。少し右へ傾き、上唇の線が右の口角から小さくはね上がる。
+ * 困り顔（と引っぱられている間）は上唇が「へ」の字の泣き口、驚くと小さな縦長の「o」。それ以外の表情はふつうの口に任せる（false を返す）
+ */
+function speakiMouth(ctx: CanvasRenderingContext2D, expr: Expr): boolean {
+  // 引っぱられている間は、困り顔の泣き口
+  const e = expr === 'pinched' ? 'worried' : expr;
+  const calm = e === 'normal' || e === 'smile' || e === 'happy';
+  if (!calm && e !== 'worried' && e !== 'surprised') return false;
+  const lip = new Path2D();
+  if (e === 'surprised') {
+    lip.ellipse(0, 33, 4, 6, 0, 0, Math.PI * 2);
+  } else if (e === 'worried') {
+    lip.moveTo(-6, 29);
+    lip.quadraticCurveTo(0, 20.5, 6, 29);
+    lip.bezierCurveTo(8, 35, 6, 42.5, 0, 42.5);
+    lip.bezierCurveTo(-6, 42.5, -8, 35, -6, 29);
+  } else {
+    lip.moveTo(-4, 25);
+    lip.quadraticCurveTo(0, 23, 4.5, 23);
+    lip.bezierCurveTo(8.5, 27, 7.5, 39.5, 1, 42.5);
+    lip.bezierCurveTo(-5.5, 44, -7.5, 33, -4, 25);
+  }
+  ctx.save();
+  if (calm) {
+    ctx.translate(0, 33);
+    ctx.rotate(0.12);
+    ctx.translate(0, -33);
+  }
+  ctx.fillStyle = vgrad(ctx, 23, 43, [MOUTH, '#ef8a92', TONGUE]);
+  ctx.fill(lip);
+  ctx.strokeStyle = ink();
+  ctx.lineWidth = 2.3 * lineK;
+  ctx.stroke(lip);
+  if (calm) {
+    ctx.beginPath();
+    ctx.moveTo(4.5, 23);
+    ctx.quadraticCurveTo(8.5, 25.2, 10.5, 21.8);
+    ctx.stroke();
+  }
+  ctx.restore();
+  return true;
+}
+
+/** スピキの眉: いつも内側の上がった困り眉 */
+function speakiBrows(ctx: CanvasRenderingContext2D, s: ChibiSpec, e: Expr): void {
+  const deep = e === 'worried' || e === 'surprised';
+  ctx.strokeStyle = mix(s.hairShade, LINE, 0.55);
+  ctx.lineWidth = 2.4 * lineK;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(side * 11, deep ? -5 : -2);
+    ctx.quadraticCurveTo(side * 19, deep ? -4 : -1.5, side * 27, deep ? 2 : 2.5);
+    ctx.stroke();
+  }
+}
+
+/** 塗りつぶしの丸をまとめて描く [x, y, r][] */
+function discs(ctx: CanvasRenderingContext2D, list: number[][], fill: string | CanvasGradient): void {
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  for (const [x, y, r] of list) {
+    ctx.moveTo(x + r, y);
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+  }
+  ctx.fill();
+}
+
+function sweat(ctx: CanvasRenderingContext2D): void {
+  ctx.beginPath();
+  ctx.moveTo(-46, -24);
+  ctx.quadraticCurveTo(-38, -10, -42, -6);
+  ctx.quadraticCurveTo(-50, -2, -50, -10);
+  ctx.closePath();
+  fillStroke(ctx, '#9fd8f2', 2, '#5aa6c8');
+}
+
+function mix(a: string, b: string, t: number): string {
+  const pa = parseInt(a.slice(1), 16);
+  const pb = parseInt(b.slice(1), 16);
+  const ch = (shift: number) =>
+    Math.round(((pa >> shift) & 255) * (1 - t) + ((pb >> shift) & 255) * t);
+  return `#${((ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).padStart(6, '0')}`;
+}

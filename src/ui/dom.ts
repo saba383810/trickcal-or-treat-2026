@@ -1,0 +1,258 @@
+import type { ItemKind } from '../config/balance';
+import type { Sound } from '../audio/sound';
+import { MochiBody } from '../mochi/body';
+import { drawChibi, feetR, type ChibiPose, type ChibiSpec, type Expr } from '../view/draw/chibi';
+import { drawItem } from '../view/draw/items';
+import { renderRatio } from '../view/screen';
+
+type Child = Node | string | null | undefined | false;
+
+/** 小さな DOM ビルダー */
+export function h<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  attrs: Record<string, string | number | boolean | ((e: Event) => void)> = {},
+  ...children: Child[]
+): HTMLElementTagNameMap[K] {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (typeof v === 'function') el.addEventListener(k.replace(/^on/, '').toLowerCase(), v);
+    else if (k === 'class') el.className = String(v);
+    else if (typeof v === 'boolean') {
+      if (v) el.setAttribute(k, '');
+    } else el.setAttribute(k, String(v));
+  }
+  for (const c of children) {
+    if (c === null || c === undefined || c === false) continue;
+    el.append(c);
+  }
+  return el;
+}
+
+function dpr(): number {
+  return renderRatio();
+}
+
+/** キャラの絵の枠（size = 頭の半径 px）。w = 幅、top = 頭の中心の高さ、ht = 高さ */
+function chibiBox(spec: ChibiSpec, size: number, body: boolean): { w: number; top: number; ht: number } {
+  const top = size * 1.85;
+  return { w: size * 3.7, top, ht: top + (body ? size * (feetR(spec) + 0.1) : size * 1.25) };
+}
+
+/** canvas を置いた大きさ ÷ 作った大きさ（CSS で縮めて置く所がある） */
+const fitScale = new WeakMap<HTMLCanvasElement, number>();
+
+/**
+ * 幅 w × 高さ ht（CSS px）の絵の canvas を、ページに置かれた大きさで描く（置き直されたら描き直す）。
+ * タイトルや遊び方は CSS で絵を縮めて並べるので、作った大きさで描いて縮めると線が細く薄くなり、
+ * 置かれた大きさで描くつまんだ時の絵とも線の太さがずれる。paint は CSS px の座標で描き、s は縮めた倍率
+ */
+function fitCanvas(cv: HTMLCanvasElement, w: number, ht: number, paint: (c: CanvasRenderingContext2D, s: number) => void): void {
+  cv.style.width = `${w}px`;
+  cv.style.height = `${ht}px`;
+  let drawn = '';
+  const draw = (shownHt: number) => {
+    const s = shownHt > 0 ? shownHt / ht : 1;
+    const k = dpr() * s;
+    const pw = Math.ceil(w * k);
+    const ph = Math.ceil(ht * k);
+    const key = `${pw}x${ph}`;
+    if (key === drawn) return;
+    drawn = key;
+    fitScale.set(cv, s);
+    cv.width = pw;
+    cv.height = ph;
+    const c = cv.getContext('2d')!;
+    c.setTransform(k, 0, 0, k, 0, 0);
+    paint(c, s);
+  };
+  draw(0);
+  new ResizeObserver((es) => draw(es[es.length - 1].contentRect.height)).observe(cv);
+}
+
+/** キャラの絵を canvas 要素として作る（size = 頭の半径 px） */
+export function chibiCanvas(spec: ChibiSpec, expr: Expr, size: number, opts: { body?: boolean; flip?: boolean } = {}): HTMLCanvasElement {
+  const body = opts.body !== false;
+  const { w, top, ht } = chibiBox(spec, size, body);
+  const cv = document.createElement('canvas');
+  cv.className = 'chibi';
+  fitCanvas(cv, w, ht, (c) => {
+    if (opts.flip) {
+      c.translate(w, 0);
+      c.scale(-1, 1);
+    }
+    drawChibi(c, spec, w / 2, top, size, { expr, t: 0.4, body });
+  });
+  return cv;
+}
+
+/**
+ * ほっぺを引っぱれるキャラ。chibiCanvas と同じ大きさで並び、つまんでいる間と揺れている間だけ、
+ * 絵を隠して上に重ねた大きめの canvas へ変形した絵を描く（伸びた分は枠の外へはみ出す）
+ */
+export function mochiChibi(
+  spec: ChibiSpec,
+  expr: Expr,
+  size: number,
+  opts: { body?: boolean; flip?: boolean; sound?: Sound } = {},
+): HTMLElement {
+  const body = opts.body !== false;
+  const base = chibiCanvas(spec, expr, size, opts);
+  const { w, top, ht } = chibiBox(spec, size, body);
+  const flip = opts.flip ? -1 : 1;
+  const mochi = new MochiBody();
+  const m = (mochi.pinch.lmax * 1.25 * size) / 50;
+  const over = document.createElement('canvas');
+  over.className = 'chibi mochi-over';
+  // 置き場所ごとの canvas の大きさ指定（!important）より強く、絵の枠に合わせる
+  const place = (k: string, v: number) => over.style.setProperty(k, `${v * 100}%`, 'important');
+  place('left', -m / w);
+  place('top', -m / ht);
+  place('width', (w + 2 * m) / w);
+  place('height', (ht + 2 * m) / ht);
+  const wrap = h('span', { class: 'mochi' }, base, over);
+
+  const shown = () => base.getBoundingClientRect().height / ht || 1;
+  const local = (e: PointerEvent) => {
+    const r = base.getBoundingClientRect();
+    const s = shown();
+    return MochiBody.toLocal({ x: (e.clientX - r.left) / s, y: (e.clientY - r.top) / s }, w / 2, top, size, flip);
+  };
+  const draw = () => {
+    // 下の絵と同じ大きさ・同じ線の太さで描く
+    const k = dpr() * (fitScale.get(base) ?? shown());
+    const pw = Math.ceil((w + 2 * m) * k);
+    const ph = Math.ceil((ht + 2 * m) * k);
+    if (over.width !== pw || over.height !== ph) {
+      over.width = pw;
+      over.height = ph;
+    }
+    const c = over.getContext('2d')!;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(0, 0, pw, ph);
+    c.setTransform(k, 0, 0, k, k * m, k * m);
+    if (flip < 0) {
+      c.translate(w, 0);
+      c.scale(-1, 1);
+    }
+    const pose: ChibiPose = { expr: mochi.pinch.held ? 'pinched' : expr, t: 0.4, body };
+    mochi.draw(c, spec, w / 2, top, size, pose);
+  };
+  let raf = 0;
+  let last = 0;
+  const stop = () => {
+    cancelAnimationFrame(raf);
+    raf = 0;
+    last = 0;
+    over.getContext('2d')!.clearRect(0, 0, over.width, over.height);
+    base.style.visibility = '';
+    wrap.style.zIndex = '';
+  };
+  const tick = (t: number) => {
+    const dt = last ? Math.min(0.05, (t - last) / 1000) : 1 / 60;
+    last = t;
+    mochi.update(dt);
+    if (!mochi.active || !wrap.isConnected) {
+      mochi.reset();
+      stop();
+      return;
+    }
+    draw();
+    raf = requestAnimationFrame(tick);
+  };
+  const end = (e: PointerEvent) => {
+    const g = mochi.pinch.find(e.pointerId);
+    if (!g) return;
+    opts.sound?.mochiRelease(mochi.pinch.intensity(g), mochi.pinch.params.releaseFreq);
+    mochi.pinch.release(e.pointerId);
+  };
+  // ボタンの中のキャラ（モード選択）は、引っぱったあとに離してもボタンを押したことにしない
+  let start: { x: number; y: number } | null = null;
+  let pulled = false;
+  wrap.addEventListener('pointerdown', (e) => {
+    if (e.isTrusted && passDown(wrap, base, e)) return;
+    if (!mochi.grab(e.pointerId, local(e))) return;
+    e.preventDefault();
+    capture(wrap, e.pointerId);
+    // 重ねて並べたキャラの上へ、伸びたほっぺを出す
+    wrap.style.zIndex = '2';
+    start = { x: e.clientX, y: e.clientY };
+    pulled = false;
+    opts.sound?.mochiGrab();
+    draw();
+    base.style.visibility = 'hidden';
+    if (!raf) raf = requestAnimationFrame(tick);
+  });
+  wrap.addEventListener('pointermove', (e) => {
+    if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 8) pulled = true;
+    mochi.pinch.move(e.pointerId, local(e));
+  });
+  wrap.addEventListener('pointerup', end);
+  wrap.addEventListener('pointercancel', end);
+  wrap.addEventListener(
+    'click',
+    (e) => {
+      if (!pulled) return;
+      pulled = false;
+      e.preventDefault();
+      e.stopPropagation();
+    },
+    { capture: true },
+  );
+  return wrap;
+}
+
+/**
+ * 絵の透明な所を押されて、その下に別のキャラが重なっていたら、そちらへ押したことを渡す。
+ * 下に何もなければ渡さない（絵の少し外を押しても、今までどおりそのキャラをつまめる）
+ */
+function passDown(wrap: HTMLElement, base: HTMLCanvasElement, e: PointerEvent): boolean {
+  const r = base.getBoundingClientRect();
+  const px = Math.floor(((e.clientX - r.left) / r.width) * base.width);
+  const py = Math.floor(((e.clientY - r.top) / r.height) * base.height);
+  // 枠の外は読まない（Chrome は枠の外を透明で返さないことがある）
+  const x0 = Math.max(0, px - 4);
+  const y0 = Math.max(0, py - 4);
+  const x1 = Math.min(base.width, px + 5);
+  const y1 = Math.min(base.height, py + 5);
+  if (x1 <= x0 || y1 <= y0) return false;
+  const near = base.getContext('2d')!.getImageData(x0, y0, x1 - x0, y1 - y0).data;
+  for (let i = 3; i < near.length; i += 4) if (near[i] > 0) return false;
+  const below = document
+    .elementsFromPoint(e.clientX, e.clientY)
+    .map((el) => el.closest('.mochi'))
+    .find((m) => m && m !== wrap);
+  if (!below) return false;
+  if (!below.dispatchEvent(new PointerEvent('pointerdown', e))) e.preventDefault();
+  return true;
+}
+
+/** お菓子の絵 */
+export function itemCanvas(kind: ItemKind, size: number): HTMLCanvasElement {
+  const cv = document.createElement('canvas');
+  cv.className = 'item';
+  fitCanvas(cv, size, size, (c) => drawItem(c, kind, size / 2, size / 2, size * 0.42, { t: 0, phase: 0, id: 0 }));
+  return cv;
+}
+
+/** 好きな絵を描く小さな canvas（size × size） */
+export function paintCanvas(w: number, ht: number, paint: (c: CanvasRenderingContext2D) => void, cls = 'pic'): HTMLCanvasElement {
+  const cv = document.createElement('canvas');
+  cv.className = cls;
+  fitCanvas(cv, w, ht, paint);
+  return cv;
+}
+
+export function starsText(n: number, max = 5): HTMLElement {
+  const wrap = h('span', { class: 'stars', 'aria-label': `★${n}` });
+  for (let i = 0; i < max; i++) wrap.append(h('span', { class: i < n ? 'star on' : 'star' }, '★'));
+  return wrap;
+}
+
+/** setPointerCapture は、もう離れた指だと投げる */
+export function capture(el: Element, pointerId: number): void {
+  try {
+    el.setPointerCapture(pointerId);
+  } catch {
+    // 取れなくても、そのまま続ける
+  }
+}

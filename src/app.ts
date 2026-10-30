@@ -1,0 +1,413 @@
+import { Bgm } from './audio/bgm';
+import { Sound } from './audio/sound';
+import { rankOf, RANKS } from './config/balance';
+import type { CharId } from './config/characters';
+import { World } from './sim/world';
+import { loadSave, writeSave, type SaveData } from './storage';
+import { capture, h } from './ui/dom';
+import { charSelect, howToPanel, pausePanel, resultPanel, settingsPanel, titleScreen, type MenuHost } from './ui/menus';
+import { SceneCache, drawLiveDecor } from './view/draw/scene';
+import { outlined } from './view/draw/ui';
+import { GameView } from './view/gameView';
+import { makeLayout } from './view/layout';
+import { C, popFont } from './view/palette';
+import { Screen, pageZoom } from './view/screen';
+
+type Mode = 'menu' | 'countdown' | 'playing' | 'paused' | 'closing' | 'result';
+
+/** シミュレーションの固定刻み */
+const STEP = 1 / 60;
+const COUNTDOWN = 3;
+/** 時間切れからけっかを出すまで */
+const CLOSING = 2.2;
+
+export class App implements MenuHost {
+  readonly save: SaveData = loadSave();
+  readonly sound = new Sound();
+  private bgm = new Bgm(this.sound);
+  private screen: Screen;
+  private ui: HTMLElement;
+  private mode: Mode = 'menu';
+  private pausedFrom: Mode = 'playing';
+  private charId: CharId = this.save.lastChar;
+  private world: World | null = null;
+  private view: GameView | null = null;
+  private scene = new SceneCache();
+  private acc = 0;
+  private last = 0;
+  private timer = 0;
+  private menuT = 0;
+  /** 開発用: 自動で遊ぶボット（?dev=play&bot） */
+  private devBot: { step(): void } | null = null;
+
+  constructor(canvas: HTMLCanvasElement, ui: HTMLElement) {
+    this.screen = new Screen(canvas);
+    this.ui = ui;
+    this.sound.sfxVolume = this.save.sfxVolume;
+    this.sound.bgmVolume = this.save.bgmVolume;
+    this.sound.muted = this.save.muted;
+    this.bindInput(canvas);
+    void document.fonts?.load(popFont(40), '0123456789スタートフィーバー').catch(() => {});
+    this.goTitle();
+    requestAnimationFrame((t) => {
+      this.last = t;
+      requestAnimationFrame(this.frame);
+    });
+  }
+
+  persist(): void {
+    writeSave(this.save);
+  }
+
+  // ================================================================= 画面遷移
+
+  private show(el: HTMLElement): void {
+    const layer = h('div', { class: 'layer' }, el);
+    this.ui.replaceChildren(layer);
+    el.querySelector<HTMLButtonElement>('.btn.primary')?.focus({ preventScroll: true });
+  }
+
+  private clearUi(): void {
+    this.ui.replaceChildren();
+  }
+
+  private toMenu(): void {
+    this.mode = 'menu';
+    this.world = null;
+    this.view = null;
+    this.bgm.mode = 'title';
+    this.startBgm();
+  }
+
+  goTitle(): void {
+    this.toMenu();
+    this.show(
+      titleScreen(this, {
+        start: () => this.goSelect(),
+        howTo: () => this.showHowTo(() => this.goTitle()),
+        settings: () => this.show(settingsPanel(this, { close: () => this.goTitle() })),
+      }),
+    );
+  }
+
+  private goSelect(): void {
+    this.toMenu();
+    this.show(charSelect(this, { pick: (id) => this.start(id), back: () => this.goTitle() }));
+  }
+
+  private showHowTo(back: () => void): void {
+    this.show(howToPanel(this, { close: back }));
+  }
+
+  private start(id: CharId): void {
+    this.clearUi();
+    this.charId = id;
+    const world = new World(id, (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0);
+    const view = new GameView(world, id, this.screen, this.sound, this.bgm, this.scene);
+    view.onPause = () => this.pause();
+    view.hintComfort = this.save.comforts < 3;
+    view.hintMove = this.save.plays < 3;
+    view.fx.reduced = this.save.calm;
+    this.world = world;
+    this.view = view;
+    this.acc = 0;
+    this.mode = 'countdown';
+    this.timer = COUNTDOWN;
+    this.bgm.stop();
+    this.sound.countdown(false);
+  }
+
+  private pause(): void {
+    if (this.mode !== 'playing' && this.mode !== 'countdown') return;
+    this.pausedFrom = this.mode;
+    this.mode = 'paused';
+    this.view?.cancelInput();
+    this.bgm.stop();
+    this.showPause();
+  }
+
+  private showPause(): void {
+    this.show(
+      pausePanel(this, {
+        resume: () => this.resume(),
+        retry: () => this.start(this.charId),
+        select: () => this.goSelect(),
+        howTo: () => this.showHowTo(() => this.showPause()),
+      }),
+    );
+  }
+
+  private resume(): void {
+    if (this.mode !== 'paused') return;
+    this.clearUi();
+    this.mode = this.pausedFrom;
+    if (this.mode === 'playing') this.startBgm();
+  }
+
+  private showResult(): void {
+    const w = this.world!;
+    const id = this.charId;
+    const prevBest = this.save.best[id] ?? 0;
+    const prevSweets = this.save.sweets;
+    const st = w.stats;
+    const sweets = st.caught.candy + st.caught.star + st.caught.mokaron + st.caught.shucaron;
+    this.save.best[id] = Math.max(prevBest, w.score);
+    const rank = rankOf(w.score);
+    const prevRank = this.save.rank[id];
+    const order = RANKS.map((r) => r.id as string);
+    if (!prevRank || order.indexOf(rank) < order.indexOf(prevRank)) this.save.rank[id] = rank;
+    this.save.plays++;
+    this.save.sweets += sweets;
+    this.save.comforts += st.comforts;
+    this.persist();
+    this.mode = 'result';
+    this.bgm.mode = 'title';
+    this.startBgm();
+    this.show(
+      resultPanel(
+        this,
+        { world: w, charId: id, prevBest, prevSweets },
+        {
+          retry: () => this.start(id),
+          select: () => this.goSelect(),
+          title: () => this.goTitle(),
+        },
+      ),
+    );
+  }
+
+  /**
+   * 開発用: URL の ?dev=select|howto|settings|pause|play|result で画面を飛ばす（スクリーンショットの確認用）。
+   * play は &char= &t=（その秒まで進める） &cry=（スピキの泣きレベル） &fever &bot（ボットが遊ぶ）
+   */
+  devJump(q: URLSearchParams, makeBot: (w: World) => { step(): void }): void {
+    const dev = q.get('dev');
+    const id = (q.get('char') as CharId | null) ?? this.save.lastChar;
+    if (dev === 'select') return this.goSelect();
+    if (dev === 'howto') return this.showHowTo(() => this.goTitle());
+    if (dev === 'settings') return this.show(settingsPanel(this, { close: () => this.goTitle() }));
+    this.start(id);
+    const w = this.world!;
+    const view = this.view!;
+    const bot = makeBot(w);
+    const t = Number(q.get('t') ?? 8);
+    while (w.time < t && !w.over) {
+      bot.step();
+      w.update(STEP);
+      view.update(STEP);
+    }
+    if (q.has('fever')) (w as unknown as { startFever(): void }).startFever();
+    if (q.has('cry')) {
+      w.spiki.level = Number(q.get('cry'));
+      w.spiki.cry = 3;
+    }
+    this.mode = 'playing';
+    view.enable();
+    this.bgm.mode = 'normal';
+    if (q.has('bot')) this.devBot = bot;
+    if (dev === 'pause') this.pause();
+    if (dev === 'result') {
+      while (!w.over) {
+        bot.step();
+        w.update(STEP);
+      }
+      view.update(STEP);
+      this.showResult();
+    }
+  }
+
+  // ===================================================================== 入力
+
+  private unlockAudio(): void {
+    this.sound.unlock();
+    if (!this.bgm.playing && (this.mode === 'menu' || this.mode === 'playing' || this.mode === 'result')) this.startBgm();
+  }
+
+  private startBgm(): void {
+    if (this.sound.ctx) this.bgm.play(this.bgm.mode);
+  }
+
+  private get inGame(): boolean {
+    return this.mode === 'playing' || this.mode === 'countdown';
+  }
+
+  private bindInput(canvas: HTMLCanvasElement): void {
+    // 音の解禁はユーザー操作の中で行う。タッチは pointerdown では解禁されない端末があるので離した時にも試す
+    for (const type of ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown']) {
+      document.addEventListener(type, () => this.unlockAudio(), { capture: true });
+    }
+
+    canvas.addEventListener('pointerdown', (e) => {
+      const view = this.view;
+      if (!view || !this.inGame) return;
+      e.preventDefault();
+      // 指が画面の外へ出ても追い続ける（もう離れた指だと投げるので無視）
+      if (e.pointerType !== 'mouse') capture(canvas, e.pointerId);
+      view.pointerDown(e.pointerId, this.screen.toLogical(e.clientX, e.clientY), e.pointerType);
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      if (!this.inGame) return;
+      this.view?.pointerMove(e.pointerId, this.screen.toLogical(e.clientX, e.clientY), e.pointerType);
+    });
+    const up = (e: PointerEvent) => this.view?.pointerUp(e.pointerId);
+    canvas.addEventListener('pointerup', up);
+    canvas.addEventListener('lostpointercapture', up);
+    canvas.addEventListener('pointercancel', (e) => this.view?.pointerCancel(e.pointerId));
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    window.addEventListener('keydown', (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const key = e.key;
+      if (this.mode === 'paused') {
+        if (!e.repeat && (key === 'Escape' || key === 'p' || key === 'P')) {
+          e.preventDefault();
+          this.resume();
+        }
+        return;
+      }
+      const view = this.view;
+      if (!view || !this.inGame) return;
+      if (e.repeat) {
+        e.preventDefault();
+        return;
+      }
+      if (view.keyDown(e)) {
+        e.preventDefault();
+        return;
+      }
+      if (key === 'Escape' || key === 'p' || key === 'P') {
+        e.preventDefault();
+        this.pause();
+      }
+    });
+    window.addEventListener('keyup', (e) => this.view?.keyUp(e));
+
+    const onResize = () => {
+      this.screen.resize();
+      this.view?.relayout();
+    };
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    // ピンチでページを拡大・縮小した時は resize が来ないので、拡大率が変わったら描き直す
+    let zoom = pageZoom();
+    let zoomTimer = 0;
+    const onZoom = () => {
+      clearTimeout(zoomTimer);
+      zoomTimer = window.setTimeout(() => {
+        if (pageZoom() === zoom) return;
+        zoom = pageZoom();
+        onResize();
+      }, 200);
+    };
+    window.visualViewport?.addEventListener('resize', onZoom);
+    try {
+      if (window.top && window.top !== window) window.top.visualViewport?.addEventListener('resize', onZoom);
+    } catch {
+      // 別オリジンのフレームの中では外側を読めない
+    }
+    document.addEventListener('gesturestart', (e) => e.preventDefault());
+
+    // タブを離れたら自動でポーズ
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        this.pause();
+        this.bgm.stop();
+        this.sound.sleep();
+      } else {
+        this.sound.wake();
+      }
+    });
+    window.addEventListener('blur', () => this.pause());
+  }
+
+  // =================================================================== ループ
+
+  private frame = (now: number): void => {
+    const dt = Math.min(0.1, Math.max(0, (now - this.last) / 1000));
+    this.last = now;
+    this.tick(dt);
+    requestAnimationFrame(this.frame);
+  };
+
+  private tick(dt: number): void {
+    const view = this.view;
+    const world = this.world;
+    switch (this.mode) {
+      case 'menu':
+        this.menuT += dt;
+        this.drawBackdrop();
+        return;
+      case 'countdown': {
+        const before = Math.ceil(this.timer);
+        this.timer -= dt;
+        const after = Math.ceil(this.timer);
+        if (this.timer <= 0) {
+          this.mode = 'playing';
+          view!.enable();
+          view!.banner('スタート!', C.gold, 1.0, 84);
+          this.sound.countdown(true);
+          this.bgm.mode = 'normal';
+          this.startBgm();
+        } else if (after !== before) this.sound.countdown(false);
+        break;
+      }
+      case 'playing':
+        this.acc += dt;
+        while (this.acc >= STEP) {
+          this.devBot?.step();
+          world!.update(STEP);
+          this.acc -= STEP;
+        }
+        if (world!.over) {
+          this.mode = 'closing';
+          this.timer = CLOSING;
+          view!.disable();
+          this.bgm.stop();
+        }
+        break;
+      case 'closing':
+        this.timer -= dt;
+        if (this.timer <= 0) this.showResult();
+        break;
+      case 'paused':
+        view?.render();
+        return;
+      case 'result':
+        break;
+    }
+    if (!view) return;
+    view.update(dt);
+    view.render();
+    if (this.mode === 'countdown') this.drawCountdown();
+  }
+
+  private drawCountdown(): void {
+    const scr = this.screen;
+    const c = scr.ctx;
+    scr.begin();
+    const n = Math.ceil(this.timer);
+    const p = 1 - (this.timer - (n - 1));
+    const s = 1.4 - Math.min(1, p * 4) * 0.4;
+    const f = this.view!.L.field;
+    c.save();
+    c.globalAlpha = Math.min(1, (1 - p) * 4);
+    c.translate(f.x + f.w / 2, f.y + f.h * 0.4);
+    c.scale(s, s);
+    outlined(c, String(n), 0, 0, { size: 150, font: popFont(150), fill: C.white, stroke: C.ink, width: 26 });
+    c.restore();
+  }
+
+  /** メニューの後ろの、おばけの国の夜景 */
+  private drawBackdrop(): void {
+    const scr = this.screen;
+    const c = scr.ctx;
+    const L = makeLayout(scr.w, scr.h, scr.portrait);
+    const back = this.scene.ensure(L, scr.pixelRatio);
+    scr.clear('#1a1331');
+    scr.begin();
+    c.drawImage(back, 0, 0, L.w, L.h);
+    drawLiveDecor(c, L, this.menuT, 0);
+    c.fillStyle = 'rgba(20, 10, 40, 0.35)';
+    c.fillRect(0, 0, L.w, L.h);
+  }
+}

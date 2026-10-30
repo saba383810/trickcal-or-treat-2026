@@ -1,0 +1,861 @@
+:root {
+  --ink: #4a2a3f;
+  --ink-soft: #7a5470;
+  --line-ink: #5a2d32;
+  --paper: #fffaf3;
+  --grid: #efe6f6;
+  --frame: #5b3f86;
+  --frame-deep: #2a1a40;
+  --night: #2a2046;
+  --orange: #ff9f43;
+  --orange-deep: #e0702a;
+  --gold: #f6c453;
+  --pink: #ff8fb3;
+  --marker: #ffd9a8;
+  --font: 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', 'Hiragino Sans', system-ui, sans-serif;
+  --pop: 'Jua', 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  background: #1a1331;
+  color: var(--ink);
+  font-family: var(--font);
+  font-weight: 700;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  overscroll-behavior: none;
+  touch-action: pan-x pan-y;
+}
+
+#game {
+  position: fixed;
+  inset: 0;
+  display: block;
+  touch-action: none;
+}
+
+#ui {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+  overflow: auto;
+  pointer-events: auto;
+  background: rgba(16, 8, 34, 0.45);
+}
+
+.layer:has(> .screen) {
+  background: transparent;
+}
+
+.panel,
+.screen {
+  margin: auto;
+  animation: pop 0.2s ease-out;
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+.panel {
+  position: relative;
+  width: min(580px, 100%);
+  padding: 22px 22px 18px;
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-position: -1px -1px;
+  background-size: 22px 22px;
+  border: 6px solid var(--frame);
+  border-radius: 24px;
+  box-shadow:
+    inset 0 0 0 2px #e8dcf5,
+    0 0 0 3px var(--line-ink),
+    0 8px 0 3px var(--frame-deep),
+    0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
+/* 上の角のかぼちゃ */
+.panel::before {
+  position: absolute;
+  top: -24px;
+  left: -18px;
+  width: 50px;
+  height: 46px;
+  pointer-events: none;
+  content: '';
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 58'%3E%3Cpath d='M30 14q-2-9 6-12l4 4q-5 2-5 8z' fill='%236f8a4a' stroke='%235a2d32' stroke-width='2.5' stroke-linejoin='round'/%3E%3Cpath d='M32 13C18 8 4 16 4 34s14 22 28 20c14 2 28-2 28-20S46 8 32 13z' fill='%23f7953f' stroke='%235a2d32' stroke-width='3'/%3E%3Cpath d='M22 15q-8 19 0 38M42 15q8 19 0 38' fill='none' stroke='%23d06a2a' stroke-width='2.5'/%3E%3Cpath d='M18 31h8M38 31h8M27 40q2.5 3 5 0q2.5 3 5 0' fill='none' stroke='%234a2418' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  transform: rotate(-12deg);
+}
+
+h2 {
+  display: table;
+  margin: 0 auto 14px;
+  padding: 0 12px;
+  font-size: 26px;
+  font-weight: 800;
+  text-align: center;
+  background: linear-gradient(transparent 55%, var(--marker) 55%, var(--marker) 92%, transparent 92%);
+}
+
+p {
+  margin: 0;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.row.small {
+  margin-top: 10px;
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
+  width: min(280px, 100%);
+  margin: 0 auto;
+}
+
+/* ------------------------------------------------------------------ buttons */
+
+.btn {
+  min-height: 48px;
+  padding: 10px 24px;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--ink);
+  cursor: pointer;
+  background: #fff;
+  border: 3px solid var(--line-ink);
+  border-radius: 999px;
+  box-shadow: 0 4px 0 var(--line-ink);
+  transition: transform 0.06s;
+}
+
+.btn:hover {
+  background: #fff4e4;
+}
+
+.btn:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 var(--line-ink);
+}
+
+.btn:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 3px;
+}
+
+.btn.primary {
+  color: #fff;
+  text-shadow:
+    0 2px 0 var(--orange-deep),
+    0 0 4px rgba(120, 40, 0, 0.4);
+  background: linear-gradient(#ffb766, var(--orange) 55%, var(--orange-deep));
+}
+
+.btn.primary:hover {
+  background: linear-gradient(#ffc27e, #ffab55 55%, #ea7b33);
+}
+
+.btn.big {
+  min-width: 240px;
+  min-height: 62px;
+  font-size: 26px;
+}
+
+.btn.ghost {
+  min-height: 40px;
+  padding: 6px 18px;
+  font-size: 15px;
+  background: rgba(255, 255, 255, 0.7);
+  border-width: 2px;
+  box-shadow: 0 3px 0 var(--line-ink);
+}
+
+.btn.share {
+  color: #fff;
+  background: #222;
+}
+
+/* ------------------------------------------------------------------ キャラの絵 */
+
+canvas.chibi,
+canvas.item,
+canvas.pic {
+  display: block;
+}
+
+.mochi {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.mochi:active {
+  cursor: grabbing;
+}
+
+.mochi-over {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* 絵はステッカーのように白フチ */
+.title-stage canvas.chibi,
+.result-face canvas.chibi,
+.tip-face canvas.chibi {
+  filter: drop-shadow(2px 0 0 #fff) drop-shadow(-2px 0 0 #fff) drop-shadow(0 2px 0 #fff) drop-shadow(0 -2px 0 #fff)
+    drop-shadow(0 4px 3px rgba(20, 10, 40, 0.35));
+}
+
+/* ------------------------------------------------------------------ タイトル */
+
+.title {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: center;
+  width: min(900px, 100%);
+  text-align: center;
+}
+
+.logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.logo-sub {
+  padding: 4px 14px;
+  font-size: 15px;
+  color: #fff;
+  background: rgba(40, 20, 70, 0.8);
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-radius: 999px;
+}
+
+.logo h1 {
+  display: flex;
+  flex-direction: column;
+  margin: 6px 0 0;
+  font-family: var(--pop);
+  font-weight: 400;
+  line-height: 1.02;
+  letter-spacing: 0.02em;
+  transform: rotate(-3deg);
+}
+
+.logo h1 span {
+  color: #fff;
+  -webkit-text-stroke: 10px var(--ink);
+  paint-order: stroke fill;
+  text-shadow: 0 6px 0 var(--frame-deep);
+}
+
+.logo .l1 {
+  font-size: clamp(30px, 6vw, 46px);
+  color: #e6d6ff;
+}
+
+.logo .l2 {
+  font-size: clamp(46px, 10.5vw, 86px);
+  color: #ffc24d;
+}
+
+.title-stage {
+  position: relative;
+  display: flex;
+  gap: 4px;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.title-cast {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.title-cast .mochi {
+  margin: 0 -10px;
+}
+
+.title-cast .mochi:nth-child(odd) {
+  animation: bob 1.6s ease-in-out infinite;
+}
+
+.title-cast .mochi:nth-child(even) {
+  animation: bob 1.6s ease-in-out 0.8s infinite;
+}
+
+@keyframes bob {
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.title-spiki {
+  margin-left: 6px;
+}
+
+.menu-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+}
+
+.menu-buttons .row {
+  margin-top: 8px;
+}
+
+.badge {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+  justify-content: center;
+  padding: 6px 16px;
+  font-size: 14px;
+  color: #fff;
+  background: rgba(40, 20, 70, 0.75);
+  border-radius: 14px;
+}
+
+.badge b {
+  color: var(--gold);
+}
+
+.badge small {
+  color: #d9cdf0;
+}
+
+.disclaimer {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  text-shadow: 0 1px 2px #000;
+}
+
+/* ------------------------------------------------------------------ キャラえらび */
+
+.select {
+  width: min(760px, 100%);
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 2px 8px;
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  background: #fff;
+  border: 3px solid #d9cce8;
+  border-radius: 16px;
+  transition:
+    transform 0.1s,
+    border-color 0.1s;
+}
+
+.card.on {
+  background: color-mix(in srgb, var(--c) 18%, #fff);
+  border-color: var(--c);
+  box-shadow: 0 0 0 3px var(--line-ink);
+  transform: translateY(-4px);
+}
+
+.card .mochi {
+  margin: -6px -18px 0;
+}
+
+.card-name {
+  display: flex;
+  flex-direction: column;
+  font-size: 15px;
+  line-height: 1.15;
+}
+
+.card-name small,
+.detail-name small {
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.card .rank {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+}
+
+.detail {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+  align-items: center;
+  margin-top: 14px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 2px dashed #cdb9e6;
+  border-radius: 16px;
+}
+
+.detail-name {
+  display: flex;
+  flex-direction: column;
+  font-size: 24px;
+  line-height: 1.1;
+  color: var(--ink);
+}
+
+.detail-name::after {
+  display: block;
+  height: 5px;
+  margin-top: 3px;
+  content: '';
+  background: var(--c);
+  border-radius: 3px;
+}
+
+.hello {
+  font-size: 15px;
+  color: var(--ink-soft);
+}
+
+.stat-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 13px;
+}
+
+.stat {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.stat > span:first-child {
+  width: 58px;
+}
+
+.stars .star {
+  color: #e0d6ea;
+}
+
+.stars .star.on {
+  color: var(--gold);
+  text-shadow:
+    0 0 1px var(--line-ink),
+    0 1px 0 var(--line-ink);
+}
+
+.ability {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.best-line {
+  grid-column: 1 / -1;
+  font-size: 14px;
+  text-align: right;
+}
+
+.best-line b {
+  font-family: var(--pop);
+  font-size: 20px;
+  font-weight: 400;
+}
+
+/* ------------------------------------------------------------------ ランク */
+
+.rank {
+  display: inline-grid;
+  place-items: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 4px;
+  font-family: var(--pop);
+  font-size: 20px;
+  font-weight: 400;
+  color: #fff;
+  vertical-align: middle;
+  background: #b9b0c6;
+  border: 2px solid var(--line-ink);
+  border-radius: 50%;
+}
+
+.rank.small {
+  min-width: 24px;
+  height: 24px;
+  font-size: 14px;
+}
+
+.rank-none {
+  opacity: 0.35;
+}
+
+.rank-SS {
+  background: linear-gradient(135deg, #ff7ac8, #ffb86b, #ffe66b, #8de08a, #7fd0f0, #b48cf0);
+}
+
+.rank-S {
+  background: linear-gradient(#ffe48a, #e8a92a);
+}
+
+.rank-A {
+  background: linear-gradient(#ffb0cb, #f0739c);
+}
+
+.rank-B {
+  background: linear-gradient(#a8dcf5, #5ba8d6);
+}
+
+.rank-C {
+  background: linear-gradient(#c8bfd4, #9a8fae);
+}
+
+.rank.stamp {
+  min-width: 76px;
+  height: 76px;
+  font-size: 46px;
+  border-width: 4px;
+  box-shadow: 0 4px 0 var(--line-ink);
+  opacity: 0;
+  transform: scale(2.4) rotate(-20deg);
+}
+
+.rank.stamp.show {
+  opacity: 1;
+  transform: scale(1) rotate(-8deg);
+  transition:
+    transform 0.25s cubic-bezier(0.3, 1.6, 0.5, 1),
+    opacity 0.1s;
+}
+
+/* ------------------------------------------------------------------ あそびかた */
+
+.howto {
+  width: min(640px, 100%);
+}
+
+.lead {
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.items {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px 12px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.items li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.items li span {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.items small {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.tips {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.spiki-tip {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 12px;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.55;
+  background: #eaf6fd;
+  border: 2px dashed #9fcbe6;
+  border-radius: 14px;
+}
+
+.tip-face {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
+.tip-face .mochi {
+  margin: 0 -10px;
+}
+
+.tip-face .arrow {
+  position: relative;
+  z-index: 3;
+  margin: 0 6px;
+  font-size: 22px;
+  color: var(--ink-soft);
+}
+
+/* ------------------------------------------------------------------ せってい */
+
+.setting {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 10px 0;
+  font-size: 17px;
+}
+
+.setting > span {
+  width: 80px;
+}
+
+.setting.check > span {
+  width: auto;
+}
+
+.setting input[type='range'] {
+  flex: 1;
+  accent-color: var(--orange);
+}
+
+.setting input[type='checkbox'] {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--orange);
+}
+
+.pause {
+  width: min(360px, 100%);
+}
+
+/* ------------------------------------------------------------------ けっか */
+
+.result {
+  width: min(600px, 100%);
+}
+
+.result-top {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+}
+
+.score-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.score-box small {
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+
+.score {
+  font-family: var(--pop);
+  font-size: 60px;
+  font-weight: 400;
+  line-height: 1;
+  color: #fff;
+  -webkit-text-stroke: 8px var(--ink);
+  paint-order: stroke fill;
+  text-shadow: 0 4px 0 var(--frame-deep);
+}
+
+.rank-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.rank-text {
+  font-size: 18px;
+}
+
+.new {
+  margin-top: 6px;
+  padding: 2px 12px;
+  font-size: 16px;
+  color: #fff;
+  background: linear-gradient(90deg, #ff7ac8, #ff9f43);
+  border-radius: 999px;
+  animation: shine 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes shine {
+  to {
+    filter: brightness(1.2);
+    transform: scale(1.05);
+  }
+}
+
+.prev {
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+
+.line {
+  margin: 8px 0 10px;
+  font-size: 16px;
+  text-align: center;
+}
+
+.breakdown {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 3px 16px;
+  padding: 8px 12px;
+  margin: 0;
+  font-size: 14px;
+  list-style: none;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 12px;
+}
+
+.breakdown li {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 30px;
+}
+
+.breakdown .k {
+  flex: 1;
+}
+
+.breakdown b {
+  font-family: var(--pop);
+  font-size: 18px;
+  font-weight: 400;
+}
+
+.breakdown .dot {
+  width: 30px;
+  height: 30px;
+  background: radial-gradient(circle, #cdb9e6 0 5px, transparent 6px);
+}
+
+.next-rank,
+.title-line {
+  margin-top: 8px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.title-line small {
+  color: var(--ink-soft);
+}
+
+.new-title {
+  color: var(--orange-deep);
+}
+
+/* ------------------------------------------------------------------ 小さい画面 */
+
+@media (max-width: 560px) {
+  .panel {
+    padding: 18px 12px 14px;
+  }
+
+  .cards {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+  }
+
+  .card .mochi {
+    margin: -6px -24px 0;
+  }
+
+  .card-name {
+    font-size: 12px;
+  }
+
+  .detail {
+    grid-template-columns: 1fr;
+  }
+
+  .btn.big {
+    min-width: 200px;
+  }
+
+  .score {
+    font-size: 48px;
+  }
+
+  .spiki-tip {
+    flex-direction: column;
+  }
+}
+
+@media (max-height: 520px) {
+  .title {
+    gap: 6px;
+  }
+
+  .logo .l2 {
+    font-size: 52px;
+  }
+}
