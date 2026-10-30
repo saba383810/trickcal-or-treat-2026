@@ -42,3 +42,14 @@ ctx.translate(640, 700);
 ctx.scale(44 / 50, 44 / 50);
 hobagi(ctx, 'crashed');
 ctx.restore();
+
+// ?faces: 5 人の顔を大きく（前髪の形を見る）。?faces=2 で後ろの 2 人
+const faces = new URLSearchParams(location.search).get('faces');
+if (faces !== null) {
+  ctx.fillStyle = '#f6e8f0';
+  ctx.fillRect(0, 0, W, H);
+  const list = faces === '2' ? [YOMI, JOANNE] : [KOMMY, ELFIN, BUTTER];
+  list.forEach((spec, i) => {
+    drawChibi(ctx, spec, 250 + i * 500, 420, 170, { expr: 'normal', t: 0.4, turn: 1, body: false });
+  });
+}

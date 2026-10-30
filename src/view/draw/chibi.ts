@@ -4,8 +4,13 @@
 
 /** straight = 床まで届くまっすぐな髪（しゃがむと床に広がる） */
 export type HairStyle = 'long' | 'wavy' | 'bob' | 'twin' | 'pony' | 'short' | 'bun' | 'straight';
-/** heavy = 目まで隠れる重い前髪（モブ）、hime = 目のすぐ上でまっすぐ切りそろえた前髪 */
-export type BangStyle = 'blunt' | 'swept' | 'split' | 'heavy' | 'hime';
+/**
+ * heavy = 目まで隠れる重い前髪（モブ）、hime = 目のすぐ上でまっすぐ切りそろえた前髪。
+ * kommy 〜 joanne はその子だけの形（原作の前髪の特徴に寄せる）
+ */
+export type BangStyle = 'blunt' | 'swept' | 'split' | 'heavy' | 'hime' | 'kommy' | 'elfin' | 'butter' | 'yomi' | 'joanne';
+/** 毛束の線を、とがった毛先に合わせて引く前髪 */
+const OWN_BANGS = new Set<BangStyle>(['kommy', 'elfin', 'butter', 'yomi', 'joanne']);
 /**
  * bowband = リボン付きのカチューシャ。以下はハロウィンの仮装: witch = 魔女の帽子、skull = 頭の横のドクロ、
  * bandage = 頭に巻いた包帯とリボン、headband = 細いカチューシャ、batWings = 頭の左右のこうもりの羽の飾り
@@ -689,7 +694,8 @@ function hairTails(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
   fillStroke(ctx, vgrad(ctx, -40, bottom, [mix(s.hair, s.hairShade, 0.45), mix(s.hair, s.hairShade, 0.2), s.hairTip]), 2.6);
 }
 
-// 前髪の下端（右 → 左）。ほぼ切りそろえた線に、とがった毛束をいくつか混ぜる
+// 前髪の下端（右 → 左）。ほぼ切りそろえた線に、とがった毛束をいくつか混ぜる。
+// 3 つめの数は毛先の曲がり（+ で向かって右、- で左へ毛先がはねる）、4 つめは毛先の丸み（+ で丸い）
 const BANG_EDGES: Record<BangStyle, number[][]> = {
   blunt: [[50, 8], [46, -3], [40, -6], [34, 1], [29, -7], [18, -8], [12, -1], [7, -9], [-4, -9], [-9, -1], [-14, -9], [-26, -8], [-31, 0], [-36, -7], [-44, -4], [-50, 8], [-57, 9]],
   swept: [[50, 8], [45, -8], [38, -14], [33, -6], [28, -15], [18, -17], [12, -9], [6, -19], [-4, -15], [-10, -5], [-16, -12], [-28, -6], [-33, 2], [-38, -3], [-46, -1], [-52, 10], [-57, 9]],
@@ -698,6 +704,16 @@ const BANG_EDGES: Record<BangStyle, number[][]> = {
   heavy: [[56, 12], [46, 7], [37, 8], [34, 1], [30, 7], [13, 7], [9, 0], [5, 7], [-13, 7], [-17, 0], [-21, 7], [-39, 7], [-48, 8], [-56, 12], [-59, 14]],
   // 目のすぐ上でまっすぐ切りそろえ、右寄りに分け目がひとつ
   hime: [[50, 8], [47, -1], [34, -1], [31, -5], [28, -1], [16, -1], [11, -12], [6, -1], [-10, -1], [-13, -5], [-16, -1], [-30, -1], [-33, -5], [-36, -1], [-47, -1], [-50, 8], [-57, 9]],
+  // コミー: ふわふわの大きな毛束が外へはね、目と目の間に細い毛束が 1 本垂れる
+  kommy: [[50, 10], [45, -4], [38, 9, 6], [29, -12], [19, 4, 5], [11, -12], [4, 16, -1], [-1, -12], [-12, 4, -5], [-22, -12], [-32, 8, -6], [-41, -5], [-47, 7, -3], [-50, 9], [-57, 9]],
+  // エルフィン: 向かって左で分けて、分け目からおでこがのぞく。右側の長い毛束は右へ流れる
+  elfin: [[50, 10], [46, -2], [40, 8, 6], [32, -8], [22, -2, 5], [14, -14], [4, -6, 5], [-4, -22], [-11, -30], [-17, -18], [-24, -4, -5], [-32, -10], [-40, 4, -5], [-46, -2], [-50, 9], [-57, 9]],
+  // バター: ふんわり丸い毛束が並び、まん中の 1 束が左へくるんとはねる
+  butter: [[50, 10], [45, 0], [38, 8, 2, 6], [29, -6], [20, 4, 1, 6], [12, -8], [4, 8, -5, 3], [-4, -10], [-14, 4, -2, 6], [-24, -6], [-34, 8, -2, 6], [-42, -1], [-47, 7], [-50, 9], [-57, 9]],
+  // ヨミ: 目のすぐ上でまっすぐ切りそろえた、ぱっつんの姫カット
+  yomi: [[50, 10], [47, 4], [33, 4], [30, -3], [27, 4], [13, 4], [10, -5], [7, 4], [-7, 4], [-10, -5], [-13, 4], [-27, 4], [-30, -3], [-33, 4], [-47, 4], [-50, 10], [-57, 9]],
+  // ジョアン: 先のとがった毛束がまん中へ寄り、まん中の 1 本が目の間まで長い
+  joanne: [[50, 12], [46, 0], [40, 10, -4], [32, -6], [22, 2, -4], [13, -10], [6, 0, -2], [1, -12], [-3, 10, 0], [-8, -12], [-14, 0, 2], [-22, -10], [-31, 2, 4], [-39, -6], [-45, 8, 4], [-50, 9], [-57, 9]],
 };
 
 /** 前髪（頭のてっぺんから額まで） */
@@ -710,10 +726,15 @@ function bangsPath(s: ChibiSpec): Path2D {
   p.bezierCurveTo(38, -73, 68, -38, 58, e);
   let px = 58;
   let py = e;
-  for (const [x, y] of BANG_EDGES[s.bangs]) {
-    p.quadraticCurveTo((px + x) / 2, (py + y) / 2 + 1, x, y);
+  let pb = 0;
+  let pd = 0;
+  for (const [x, y, b = 0, d = 0] of BANG_EDGES[s.bangs]) {
+    // 毛先の両側の線を同じ向きにふくらませると毛先がそちらへ曲がり、下へふくらませると丸くなる
+    p.quadraticCurveTo((px + x) / 2 + b + pb, (py + y) / 2 + 1 + d + pd, x, y);
     px = x;
     py = y;
+    pb = b;
+    pd = d;
   }
   p.closePath();
   return p;
@@ -765,6 +786,23 @@ function bangs(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
   ctx.lineWidth = 1.8;
   const tip = s.bangs === 'heavy' ? 16 : 0;
   ctx.beginPath();
+  if (OWN_BANGS.has(s.bangs)) {
+    // 毛先へ、頭のてっぺんから毛束の線を下ろす（曲がった毛先は同じ向きに曲げる）。
+    // ぱっつん（曲がりのない前髪）は、毛束の切れ目へまっすぐ下ろす
+    const e = BANG_EDGES[s.bangs];
+    const curled = e.some((q) => q.length > 2);
+    for (let i = 1; i < e.length - 1; i++) {
+      const [x, y, b = 0] = e[i];
+      if (Math.abs(x) > 44) continue;
+      if (curled && e[i].length > 2) {
+        ctx.moveTo(x * 0.55, -62);
+        ctx.quadraticCurveTo(x * 0.95 + b * 0.8, (y - 62) / 2, x - b * 0.3, y - 5);
+      } else if (!curled && y < e[i - 1][1] && y < e[i + 1][1]) {
+        ctx.moveTo(x * 0.85, -60);
+        ctx.quadraticCurveTo(x * 1.02, (y - 60) / 2, x, y);
+      }
+    }
+  } else {
   ctx.moveTo(-14, -60);
   ctx.quadraticCurveTo(-20, -36, -16, -14 + tip);
   ctx.moveTo(16, -60);
@@ -774,6 +812,7 @@ function bangs(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
   if (s.bangs === 'heavy') {
     ctx.moveTo(38, -40);
     ctx.quadraticCurveTo(42, -18, 40, 4);
+  }
   }
   ctx.stroke();
   ctx.restore();
