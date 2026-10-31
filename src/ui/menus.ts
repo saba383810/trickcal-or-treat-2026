@@ -629,7 +629,7 @@ export function pausePanel(
 // ===================================================================== けっか
 
 /** X でシェアする時のリンク */
-const SHARE_URL = 'https://sabanogames.com/entertainments/trickcal-or-treat-2026/';
+const SHARE_URL = 'https://sabanogames.com/entertainments/trickcal-or-treat-2026-1/';
 
 export interface ResultInfo {
   world: World;

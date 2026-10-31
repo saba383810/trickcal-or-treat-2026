@@ -55,12 +55,13 @@ npm run build    # 型チェック + 本番ビルド（dist/）
 
 [sabanogames](https://github.com/saba383810/sabanogames) の「あそび場」に、エシュールのパン屋さんと同じ submodule 方式で載せる想定です。
 
-- submodule: `entertainments/trickcal-or-treat-2026`（このリポジトリ）
-- 公開 URL: `https://sabanogames.com/entertainments/trickcal-or-treat-2026/`（CI が作るフレームページ。本体は `app/` 配下）
-- CI は `npm ci && npm run build -- --base=/entertainments/trickcal-or-treat-2026/app/` でビルドする
+- submodule: `entertainments/trickcal-or-treat-2026-1`（このリポジトリ）
+- 公開 URL: `https://sabanogames.com/entertainments/trickcal-or-treat-2026-1/`（CI が作るフレームページ。本体は `app/` 配下）
+  （X のリンクの絵を取り直させるため、2026-10-31 に `trickcal-or-treat-2026` から変えた。前の URL は 301 で転送する）
+- CI は `npm ci && npm run build -- --base=/entertainments/trickcal-or-treat-2026-1/app/` でビルドする
 - 一覧のエントリは sabanogames の `site/src/data/entertainments.ts`、サムネイルは `docs/thumbnail.png` のコピー
-  （`site/public/images/entertainments/trickcal-or-treat-2026.png`）。X などのリンクの絵は `docs/og.png` のコピー
-  （`trickcal-or-treat-2026-og.png`。エントリの `ogImage`）
+  （`site/public/images/entertainments/trickcal-or-treat-2026-1.png`）。X などのリンクの絵は `docs/og.png` のコピー
+  （`trickcal-or-treat-2026-1-og.png`。エントリの `ogImage`）
 
 ## 権利・素材について
 
