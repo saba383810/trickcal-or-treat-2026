@@ -2,7 +2,7 @@ import { it } from 'vitest';
 import { RANKS, rankOf } from '../src/config/balance';
 import { CHAR_ORDER } from '../src/config/characters';
 import { MISSIONS, fits, playValue } from '../src/config/missions';
-import { DAILY_RULES, HALLOWEEN, NIGHT, NORMAL, type CourseId } from '../src/config/rules';
+import { DAILY_RULES, NIGHT, NORMAL, type CourseId } from '../src/config/rules';
 import { Rng } from '../src/sim/rng';
 import { World } from '../src/sim/world';
 import { Bot, SKILLS } from './bot';
@@ -11,7 +11,7 @@ import { Bot, SKILLS } from './bot';
 // RULE=night（まよなか）や RULE=star（今夜のおかしのルールの id）で、そのコースのルールで遊ばせる。
 const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
 const RUNS = Number(env.RUNS ?? 150);
-const RULE = [NIGHT, HALLOWEEN, ...DAILY_RULES].find((r) => r.id === env.RULE) ?? NORMAL;
+const RULE = [NIGHT, ...DAILY_RULES].find((r) => r.id === env.RULE) ?? NORMAL;
 const COURSE: CourseId = RULE === NORMAL ? 'normal' : RULE === NIGHT ? 'night' : 'daily';
 const DT = 1 / 60;
 

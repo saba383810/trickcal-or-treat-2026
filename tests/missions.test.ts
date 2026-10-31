@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MISSIONS, MISSION_SLOTS, activeMissions, judgeMissions, type Play } from '../src/config/missions';
-import { DAILY_RULES, HALLOWEEN, NIGHT, dailyRule, dailySeed, nightOpen } from '../src/config/rules';
+import { DAILY_RULES, NIGHT, dailyRule, dailySeed, nightOpen } from '../src/config/rules';
 import { World, type Stats } from '../src/sim/world';
 import { loadSave, type SaveData } from '../src/storage';
 
@@ -25,8 +25,9 @@ function play(more: Partial<Play> = {}): Play {
 }
 
 describe('今夜のおかし', () => {
-  it('10/31 はハロウィンの夜', () => {
-    expect(dailyRule('2026-10-31')).toBe(HALLOWEEN);
+  it('ルールは日付で順番に回る', () => {
+    const days = Array.from({ length: DAILY_RULES.length }, (_, i) => dailyRule(`2026-11-${String(i + 1).padStart(2, '0')}`));
+    expect(new Set(days).size).toBe(DAILY_RULES.length);
   });
 
   it('となりの日はちがうルールで、同じ日は同じたね', () => {

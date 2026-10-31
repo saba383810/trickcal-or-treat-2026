@@ -47,16 +47,6 @@ export const DAILY_RULES: Rule[] = [
   { id: 'calm', name: 'しずかな夜', note: 'ホバギが 少ない', hobagi: 0.4 },
 ];
 
-/** ハロウィン当日（10/31）だけのルール */
-export const HALLOWEEN: Rule = {
-  id: 'halloween',
-  name: 'ハロウィンの夜',
-  note: 'ホバギが多いけど、おかえし 2 倍・フィーバーも長い',
-  hobagi: 1.5,
-  gift: 2,
-  feverLen: 1.3,
-};
-
 /** その日の名前（端末の日付。0 時に切り替わる）。例: 2026-10-31 */
 export function dayKey(d = new Date()): string {
   const p = (n: number) => String(n).padStart(2, '0');
@@ -72,7 +62,6 @@ export function dayLabel(key: string): string {
 /** その日の今夜のおかしのルール */
 export function dailyRule(key: string): Rule {
   const [y, m, d] = key.split('-').map(Number);
-  if (m === 10 && d === 31) return HALLOWEEN;
   const day = Math.floor(Date.UTC(y, m - 1, d) / 86_400_000);
   return DAILY_RULES[day % DAILY_RULES.length];
 }
