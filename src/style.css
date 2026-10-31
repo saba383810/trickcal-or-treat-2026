@@ -573,16 +573,48 @@ canvas.pic {
   border-radius: 3px;
 }
 
+/* 吹き出しになっても高さが変わらないよう、ふだんから吹き出しの分の すき間をとる */
 .hello {
+  position: relative;
+  justify-self: start;
+  margin: 0 -4px 0 -12px;
+  padding: 3px 10px;
   font-size: 15px;
+  line-height: 1.35;
   color: var(--ink-soft);
+  border: 2px solid transparent;
+  border-radius: 12px;
 }
 
-/* ほっぺを しつこく引っぱった時のひとこと（しばらくして いつものセリフにもどる） */
+/* ほっぺを しつこく引っぱった時のひとこと。左の大きい顔から出る吹き出し（しばらくして いつものセリフにもどる） */
 .hello.pinch {
+  font-size: 14px;
   font-weight: 800;
   color: var(--ink);
+  background: #fff;
+  border-color: var(--line-ink);
   animation: talk-in 0.2s ease-out;
+}
+
+.hello.pinch::before,
+.hello.pinch::after {
+  position: absolute;
+  top: 50%;
+  content: '';
+  border: solid transparent;
+  transform: translateY(-50%);
+}
+
+.hello.pinch::before {
+  right: 100%;
+  border-width: 7px 9px 7px 0;
+  border-right-color: var(--line-ink);
+}
+
+.hello.pinch::after {
+  right: calc(100% - 3px);
+  border-width: 5px 7px 5px 0;
+  border-right-color: #fff;
 }
 
 .stat-rows {

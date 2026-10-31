@@ -255,12 +255,12 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId, course: Cour
   const cards = h('div', { class: 'cards' });
   const cardEls = new Map<CharId, HTMLElement>();
 
-  // ほっぺを しつこく引っぱった時のひとことは、吹き出しでなく 下のせつめいの セリフの所に出す（カードの上の吹き出しは となりのカードにかぶる）
+  // ほっぺを しつこく引っぱった時のひとことは、下のせつめいの セリフの所に、大きい顔から出る吹き出しで出す（カードの上に出すと となりのカードにかぶる）
   const helloEls = new Map<CharId, HTMLElement>();
   const helloTimers = new Map<CharId, number>();
   const say = (id: CharId) => (text: string, ms: number) => {
     const el = helloEls.get(id)!;
-    el.replaceChildren(T.common.quote(text));
+    el.replaceChildren(text);
     el.classList.add('pinch');
     window.clearTimeout(helloTimers.get(id));
     helloTimers.set(
