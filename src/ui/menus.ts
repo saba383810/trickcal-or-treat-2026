@@ -2,10 +2,10 @@
 import type { Sound } from '../audio/sound';
 import { BALANCE, RANKS, TITLES, rankOf, titleOf, type ItemKind, type RankId } from '../config/balance';
 import { CHARACTERS, CHAR_ORDER, type CharId } from '../config/characters';
-import { MISSIONS, MISSION_SLOTS, activeMissions, fits, playValue, progressOf, type Mission, type Play } from '../config/missions';
+import { MISSIONS, MISSION_SLOTS, activeMissions, fits, missionText, playValue, progressOf, type Mission, type Play } from '../config/missions';
 import { RESULT_LINE_IDS, lineKey, resultHint, resultText, type PickedLine } from '../config/lines';
-import { dailyRule, dayKey, dayLabel, nightOpen, ruleOf, type CourseId } from '../config/rules';
-import { CHAR_TEXT, DISCLAIMER, GAME_TITLE, ITEM_TEXT, RANK_TEXT, SHARE_URL, TITLE_TEXT } from '../config/text';
+import { dailyRule, dayKey, dayLabel, nightOpen, ruleOf, ruleText, type CourseId } from '../config/rules';
+import { lang, LANGS, langName, num, T, type Lang } from '../i18n';
 import type { World } from '../sim/world';
 import type { CheekWho, SaveData } from '../storage';
 import { CHAR_SPECS, SPIKEY, SPIKI } from '../view/draw/characters';
@@ -35,10 +35,6 @@ function btn(label: string, onClick: () => void, sound: Sound, cls = ''): HTMLBu
   );
 }
 
-function num(n: number): string {
-  return Math.round(n).toLocaleString('ja-JP');
-}
-
 function rankBadge(r: RankId | undefined, cls = ''): HTMLElement {
   return h('span', { class: `rank rank-${r ?? 'none'} ${cls}`.trim() }, r ?? '−');
 }
@@ -52,22 +48,25 @@ function rankBadge(r: RankId | undefined, cls = ''): HTMLElement {
 function missionRow(m: Mission, save: SaveData, state: 'done' | 'new' | 'now' | 'got' | '' = 'now', value?: number): HTMLElement {
   const v = value ?? progressOf(m, save);
   let prog = '';
-  if (state === 'done') prog = 'クリア!';
-  else if (state === 'got') prog = 'ゲット!';
-  else if (state === 'new') prog = 'NEW';
-  else if (value !== undefined && v >= m.goal) prog = 'できた!';
-  else if (m.goal > 1 && v > 0) prog = `${value === undefined && !m.total ? 'さいこう ' : ''}${num(Math.min(v, m.goal))}/${num(m.goal)}`;
+  if (state === 'done') prog = T.missions.cleared;
+  else if (state === 'got') prog = T.missions.got;
+  else if (state === 'new') prog = T.missions.new;
+  else if (value !== undefined && v >= m.goal) prog = T.missions.done;
+  else if (m.goal > 1 && v > 0) {
+    prog = `${num(Math.min(v, m.goal))}/${num(m.goal)}`;
+    if (value === undefined && !m.total) prog = T.missions.best(prog);
+  }
   return h(
     'li',
     { class: `mission ${state}`.trim() },
-    h('span', { class: 'm-text' }, m.text),
+    h('span', { class: 'm-text' }, missionText(m)),
     prog ? h('small', { class: 'm-prog' }, prog) : null,
-    h('span', { class: 'm-reward', title: 'ごほうびのおかし' }, itemCanvas('candy', 16), `+${m.reward}`),
+    h('span', { class: 'm-reward', title: T.missions.reward }, itemCanvas('candy', 16), `+${m.reward}`),
   );
 }
 
 function missionsHead(save: SaveData, more = ''): HTMLElement {
-  return h('div', { class: 'missions-head' }, h('b', {}, 'ミッション'), h('small', {}, `${save.missions.length} / ${MISSIONS.length} クリア${more}`));
+  return h('div', { class: 'missions-head' }, h('b', {}, T.missions.head), h('small', {}, `${T.missions.count(save.missions.length, MISSIONS.length)}${more}`));
 }
 
 /** いまのミッション（タイトル）。押すとミッション画面 */
@@ -84,7 +83,7 @@ function missionCard(host: MenuHost, open: () => void): HTMLElement {
       class: 'missions link',
       role: 'button',
       tabindex: 0,
-      'aria-label': 'ミッションを見る',
+      'aria-label': T.missions.open,
       onclick: go,
       onkeydown: (e: Event) => {
         const k = (e as KeyboardEvent).key;
@@ -94,11 +93,35 @@ function missionCard(host: MenuHost, open: () => void): HTMLElement {
       },
     },
     missionsHead(save, ' ›'),
-    list.length ? h('ul', {}, ...list.map((m) => missionRow(m, save))) : h('p', { class: 'm-all' }, 'ぜんぶ クリア！ ありがとう！'),
+    list.length ? h('ul', {}, ...list.map((m) => missionRow(m, save))) : h('p', { class: 'm-all' }, T.missions.allDone),
   );
 }
 
 // ===================================================================== タイトル
+
+/**
+ * タイトル右上の言語ボタン。押すたびに 日本語 → 한국어 → English → 日本語 … と切り替わる。
+ * ボタンには次の言語の名前をその言語で書く（日本語の画面には「한국어」。今の言語が読めない人にも、言語のボタンだとわかる）。
+ * 画面の右上に置くので、タイトル（出てくる時に拡大のアニメーションがかかる）の中ではなく、その外側に足す
+ */
+export function langButton(host: MenuHost, onPick: (l: Lang) => void): HTMLElement {
+  const next = LANGS[(LANGS.indexOf(lang) + 1) % LANGS.length];
+  return h(
+    'button',
+    {
+      class: 'lang-btn',
+      type: 'button',
+      lang: next,
+      'aria-label': `${T.common.language}: ${langName(next)}`,
+      onclick: () => {
+        host.sound.click();
+        onPick(next);
+      },
+    },
+    h('span', { class: 'lang-icon', 'aria-hidden': 'true' }),
+    langName(next),
+  );
+}
 
 export function titleScreen(
   host: MenuHost,
@@ -130,15 +153,15 @@ export function titleScreen(
     h(
       'div',
       { class: 'logo' },
-      h('span', { class: 'logo-sub' }, 'トリッカル 非公式ファンゲーム'),
-      h('h1', { 'aria-label': GAME_TITLE }, logoArt()),
+      h('span', { class: 'logo-sub' }, T.title.sub),
+      h('h1', { 'aria-label': T.docTitle }, logoArt()),
     ),
     h('div', { class: 'title-stage' }, row),
     h(
       'div',
       { class: 'menu-buttons' },
-      btn('あそぶ', on.start, s, 'primary big'),
-      h('div', { class: 'row' }, btn('あそびかた', on.howTo, s), btn('きろく', on.records, s), btn('せってい', on.settings, s)),
+      btn(T.title.play, on.start, s, 'primary big'),
+      h('div', { class: 'row' }, btn(T.howTo.heading, on.howTo, s), btn(T.records.heading, on.records, s), btn(T.settings.heading, on.settings, s)),
     ),
     missionCard(host, on.missions),
     // 称号は押すと「きろく」で一覧が見られる
@@ -152,20 +175,21 @@ export function titleScreen(
           on.records();
         },
       },
-      h('b', {}, t ? `称号「${TITLE_TEXT[t]}」` : '称号 まだなし'),
-      h('span', {}, `今までのおかし ${num(total)} こ`),
-      next ? h('small', {}, `つぎの称号まで あと ${num(next.min - total)} こ`) : null,
+      h('b', {}, t ? T.title.badge(T.titles[t]) : T.title.noBadge),
+      h('span', {}, T.title.sweets(num(total))),
+      next ? h('small', {}, T.title.toNext(num(next.min - total))) : null,
     ),
-    h('p', { class: 'disclaimer' }, DISCLAIMER),
+    h('p', { class: 'disclaimer' }, T.disclaimer),
   );
 }
 
-/** ロゴの絵。字の形はフォントで描くので、フォントが届いたら描き直す */
+/** ロゴの絵。字の形はフォントで描くので、フォントが届いたら描き直す（韓国語の字は Jua なので、いまの言語の字で待つ） */
 function logoArt(): HTMLCanvasElement {
   const S = 64;
   const make = () => paintCanvas(LOGO_W * S, LOGO_H * S, (c) => drawLogo(c, (LOGO_W * S) / 2, 0, S), 'logo-art');
   const cv = make();
-  if (!document.fonts.check(font(S), GAME_TITLE)) void document.fonts.load(font(S), GAME_TITLE).then(() => cv.replaceWith(make()));
+  const text = T.logo.join('');
+  if (!document.fonts.check(font(S), text)) void document.fonts.load(font(S), text).then(() => cv.replaceWith(make()));
   return cv;
 }
 
@@ -176,7 +200,10 @@ function nextTitle(total: number): (typeof TITLES)[number] | undefined {
 
 // ===================================================================== キャラえらび
 
-export function charSelect(host: MenuHost, on: { pick: (id: CharId, course: CourseId) => void; back: () => void }): HTMLElement {
+export function charSelect(
+  host: MenuHost,
+  on: { pick: (id: CharId, course: CourseId) => void; practice: (id: CharId, course: CourseId) => void; back: () => void },
+): HTMLElement {
   const s = host.sound;
   const save = host.save;
   let chosen: CharId = save.lastChar;
@@ -203,7 +230,7 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId, course: Cour
 
   const detailOf = (id: CharId) => {
     const d = CHARACTERS[id];
-    const tx = CHAR_TEXT[id];
+    const tx = T.chars[id];
     const bestSlot = h('p', { class: 'best-line' });
     bestSlots.set(id, bestSlot);
     return h(
@@ -211,13 +238,13 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId, course: Cour
       { class: 'detail', style: `--c:${C[id]}` },
       h('div', { class: 'detail-face' }, mochiChibi(CHAR_SPECS[id], 'happy', 30, { sound: s, who: id })),
       h('div', { class: 'detail-name' }, h('small', {}, tx.costume), tx.name),
-      h('p', { class: 'hello' }, `「${tx.hello}」`),
+      h('p', { class: 'hello' }, T.common.quote(tx.hello)),
       h(
         'div',
         { class: 'stat-rows' },
-        h('div', { class: 'stat' }, h('span', {}, 'はやさ'), starsText(d.stars.speed)),
-        h('div', { class: 'stat' }, h('span', {}, 'キャッチ'), starsText(d.stars.reach)),
-        h('div', { class: 'stat' }, h('span', {}, 'かんたん'), starsText(d.stars.easy)),
+        h('div', { class: 'stat' }, h('span', {}, T.select.speed), starsText(d.stars.speed)),
+        h('div', { class: 'stat' }, h('span', {}, T.select.reach), starsText(d.stars.reach)),
+        h('div', { class: 'stat' }, h('span', {}, T.select.easy), starsText(d.stars.easy)),
       ),
       h('p', { class: 'ability' }, tx.ability),
       bestSlot,
@@ -232,9 +259,9 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId, course: Cour
   const note = h('p', { class: 'course-note' });
   const tabs = new Map<CourseId, HTMLButtonElement>();
   const courseList: [CourseId, string, string][] = [
-    ['normal', 'ふつう', ''],
-    ['daily', '今夜のおかし', dayLabel(today)],
-    ['night', 'まよなか', nightOK ? '' : 'ランクA達成で解放'],
+    ['normal', T.courses.normal, ''],
+    ['daily', T.courses.daily, dayLabel(today)],
+    ['night', T.courses.night, nightOK ? '' : T.select.nightLock],
   ];
   const courseRow = h('div', { class: 'courses', role: 'tablist' });
   for (const [cid, label, sub] of courseList) {
@@ -263,20 +290,20 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId, course: Cour
       tab.classList.toggle('on', cid === course);
       tab.setAttribute('aria-selected', String(cid === course));
     }
-    const r = ruleOf(course, today);
-    note.replaceChildren(course === 'daily' ? h('b', {}, `${r.name}　`) : '', r.note);
+    const r = ruleText(ruleOf(course, today));
+    note.replaceChildren(course === 'daily' ? h('b', {}, T.select.ruleName(r.name)) : '', r.note);
     note.className = `course-note ${course}`;
     for (const id of CHAR_ORDER) {
       const rec = recordOf(id);
       badgeSlots.get(id)!.replaceChildren(rankBadge(rec.rank, 'small'));
-      bestSlots.get(id)!.replaceChildren(course === 'daily' ? 'きょうのベスト ' : 'ベスト ', h('b', {}, rec.best ? num(rec.best) : '−'), ' ', rankBadge(rec.rank, 'small'));
+      bestSlots.get(id)!.replaceChildren(`${course === 'daily' ? T.common.dailyBest : T.common.best} `, h('b', {}, rec.best ? num(rec.best) : '−'), ' ', rankBadge(rec.rank, 'small'));
       // このキャラ・コースで数えるミッションがあれば、カードに印
       cardEls.get(id)!.classList.toggle('wish', wishes.some((m) => m.char === id && fits(m, id, course)));
     }
   };
 
   for (const id of CHAR_ORDER) {
-    const tx = CHAR_TEXT[id];
+    const tx = T.chars[id];
     const badgeSlot = h('span', { class: 'badge-slot' });
     badgeSlots.set(id, badgeSlot);
     const card = h(
@@ -308,29 +335,36 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId, course: Cour
     chosen = id;
     showDetail();
   }
-  const start = () => {
+  // れんしゅうは、えらんだキャラで チュートリアルから。終わったら、えらんだコースの本番へ
+  const go = (then: (id: CharId, course: CourseId) => void) => () => {
     save.lastChar = chosen;
     save.lastCourse = course;
     host.persist();
-    on.pick(chosen, course);
+    then(chosen, course);
   };
   showDetail();
   showCourse();
   return h(
     'div',
     { class: 'panel select' },
-    h('h2', {}, 'だれで あそぶ？'),
+    h('h2', {}, T.select.heading),
     courseRow,
     note,
     cards,
     details,
-    h('div', { class: 'row' }, btn('もどる', on.back, s), btn('スタート!', start, s, 'primary')),
+    h(
+      'div',
+      { class: 'row' },
+      btn(T.common.back, on.back, s),
+      btn(T.select.practice, go(on.practice), s),
+      btn(T.select.start, go(on.pick), s, 'primary'),
+    ),
   );
 }
 
 // ===================================================================== きろく
 
-const whoName = (who: CheekWho) => (who === 'spiki' ? 'スピキ' : CHAR_TEXT[who].name);
+const whoName = (who: CheekWho) => (who === 'spiki' ? T.spikiName : T.chars[who].name);
 
 export function recordsPanel(host: MenuHost, on: { close: () => void; lines: () => void }): HTMLElement {
   const s = host.sound;
@@ -360,7 +394,7 @@ export function recordsPanel(host: MenuHost, on: { close: () => void; lines: () 
           'div',
           { class: 'rec-char', style: `--c:${C[id]}` },
           mochiChibi(CHAR_SPECS[id], best[id] ? 'smile' : 'normal', 18, { sound: s, body: false, who: id }),
-          h('span', { class: 'card-name' }, CHAR_TEXT[id].name),
+          h('span', { class: 'card-name' }, T.chars[id].name),
           h('b', {}, best[id] ? num(best[id]) : '−'),
           rankBadge(rank[id], 'small'),
         ),
@@ -369,15 +403,15 @@ export function recordsPanel(host: MenuHost, on: { close: () => void; lines: () 
   return h(
     'div',
     { class: 'panel records' },
-    h('h2', {}, 'きろく'),
+    h('h2', {}, T.records.heading),
     h(
       'div',
       { class: 'rec-title' },
-      h('small', {}, 'いまの称号'),
-      h('b', {}, t ? `「${TITLE_TEXT[t]}」` : 'まだなし'),
+      h('small', {}, T.records.now),
+      h('b', {}, t ? T.common.quote(T.titles[t]) : T.records.none),
       h('div', { class: 'meter' }, h('span', { style: `width:${Math.round(ratio * 100)}%` })),
-      h('p', {}, `今までのおかし ${num(total)} こ`, next ? h('small', {}, ` ・ つぎの称号まで あと ${num(next.min - total)} こ`) : null),
-      h('p', {}, h('small', {}, `あそんだ回数 ${num(save.plays)} 回`)),
+      h('p', {}, T.records.sweets(num(total)), next ? h('small', {}, T.records.toNext(num(next.min - total))) : null),
+      h('p', {}, h('small', {}, T.records.plays(num(save.plays)))),
     ),
     h(
       'ul',
@@ -386,23 +420,29 @@ export function recordsPanel(host: MenuHost, on: { close: () => void; lines: () 
         h(
           'li',
           { class: total >= x.min ? 'got' : '' },
-          h('b', {}, TITLE_TEXT[x.id]),
-          h('small', {}, `おかし ${num(x.min)} こ`),
-          h('span', { class: 'state' }, total >= x.min ? 'ゲット!' : `あと ${num(x.min - total)} こ`),
+          h('b', {}, T.titles[x.id]),
+          h('small', {}, T.records.need(num(x.min))),
+          h('span', { class: 'state' }, total >= x.min ? T.records.got : T.records.left(num(x.min - total))),
         ),
       ),
     ),
-    h('p', { class: 'rec-note' }, 'おかしは あそぶたびと、ミッションの ごほうびで たまっていきます'),
-    h('h3', { class: 'rec-sub' }, 'ふつう'),
+    h('p', { class: 'rec-note' }, T.records.note),
+    h('h3', { class: 'rec-sub' }, T.courses.normal),
     charGrid(save.best, save.rank),
-    nightOpen(save.rank) ? h('h3', { class: 'rec-sub' }, 'まよなか') : null,
+    nightOpen(save.rank) ? h('h3', { class: 'rec-sub' }, T.courses.night) : null,
     nightOpen(save.rank) ? charGrid(save.night.best, save.night.rank) : null,
-    h('h3', { class: 'rec-sub' }, `今夜のおかし（${dayLabel(today)}・${dailyRule(today).name}）`),
-    h('p', { class: 'rec-daily' }, h('small', {}, `きょうのベスト `), h('b', {}, dailyBest ? `${num(dailyBest[1])}（${CHAR_TEXT[dailyBest[0]].name}）` : '−'), h('small', {}, `　あそんだ日 ${save.dailyDays} 日`)),
-    h('h3', { class: 'rec-sub' }, 'ほっぺ'),
-    h('p', { class: 'rec-daily' }, h('small', {}, 'のばした '), h('b', {}, `${num(cheek.pulls)} 回`), h('small', {}, `　めいっぱい ${num(cheek.big)} 回・しつこく ${num(cheek.sulks)} 回`)),
-    h('p', { class: 'rec-note' }, topCheek ? `いちばん のばしたのは ${whoName(topCheek[0])}（${num(topCheek[1])} 回）` : 'キャラの ほっぺは、タイトルでも キャラえらびでも 引っぱれます'),
-    h('div', { class: 'row' }, btn(`セリフずかん ${foundLines(save)}/${LINE_TOTAL}`, on.lines, s), btn('とじる', on.close, s, 'primary')),
+    h('h3', { class: 'rec-sub' }, T.records.daily(dayLabel(today), ruleText(dailyRule(today)).name)),
+    h(
+      'p',
+      { class: 'rec-daily' },
+      h('small', {}, `${T.common.dailyBest} `),
+      h('b', {}, dailyBest ? T.records.dailyScore(num(dailyBest[1]), T.chars[dailyBest[0]].name) : '−'),
+      h('small', {}, T.records.dailyDays(save.dailyDays)),
+    ),
+    h('h3', { class: 'rec-sub' }, T.records.cheek),
+    h('p', { class: 'rec-daily' }, h('small', {}, `${T.records.pulled} `), h('b', {}, T.common.times(num(cheek.pulls))), h('small', {}, T.records.cheekMore(num(cheek.big), num(cheek.sulks)))),
+    h('p', { class: 'rec-note' }, topCheek ? T.records.topCheek(whoName(topCheek[0]), num(topCheek[1])) : T.records.cheekNote),
+    h('div', { class: 'row' }, btn(T.records.lines(foundLines(save), LINE_TOTAL), on.lines, s), btn(T.common.close, on.close, s, 'primary')),
   );
 }
 
@@ -417,26 +457,26 @@ export function linesPanel(host: MenuHost, on: { close: () => void }): HTMLEleme
   return h(
     'div',
     { class: 'panel lines-panel' },
-    h('h2', {}, 'セリフずかん'),
-    h('p', { class: 'rec-note' }, `見つけた セリフ ${foundLines(host.save)} / ${LINE_TOTAL}。あそび終わった時の ようすで、ひとことが かわります`),
+    h('h2', {}, T.linesBook.heading),
+    h('p', { class: 'rec-note' }, T.linesBook.note(foundLines(host.save), LINE_TOTAL)),
     ...CHAR_ORDER.map((id) => {
       const got = RESULT_LINE_IDS.filter((l) => found.has(lineKey(id, l))).length;
       return h(
         'details',
         { class: 'lines-char', style: `--c:${C[id]}` },
-        h('summary', {}, h('b', {}, CHAR_TEXT[id].name), h('small', {}, `${got} / ${RESULT_LINE_IDS.length}`)),
+        h('summary', {}, h('b', {}, T.chars[id].name), h('small', {}, `${got} / ${RESULT_LINE_IDS.length}`)),
         h(
           'ul',
           {},
           ...RESULT_LINE_IDS.map((l) =>
             found.has(lineKey(id, l))
-              ? h('li', { class: 'got' }, h('span', {}, `「${resultText(id, l)}」`), h('small', {}, resultHint(id, l)))
-              : h('li', {}, h('span', {}, '？？？'), h('small', {}, resultHint(id, l))),
+              ? h('li', { class: 'got' }, h('span', {}, T.common.quote(resultText(id, l))), h('small', {}, resultHint(id, l)))
+              : h('li', {}, h('span', {}, T.linesBook.unknown), h('small', {}, resultHint(id, l))),
           ),
         ),
       );
     }),
-    h('div', { class: 'row' }, btn('もどる', on.close, s, 'primary')),
+    h('div', { class: 'row' }, btn(T.common.back, on.close, s, 'primary')),
   );
 }
 
@@ -450,27 +490,27 @@ export function missionsPanel(host: MenuHost, on: { close: () => void }): HTMLEl
   return h(
     'div',
     { class: 'panel missions-panel' },
-    h('h2', {}, 'ミッション'),
+    h('h2', {}, T.missions.head),
     h(
       'div',
       { class: 'rec-title' },
-      h('small', {}, 'クリアした ミッション'),
+      h('small', {}, T.missions.clearedHead),
       h('b', {}, `${s.missions.length} / ${MISSIONS.length}`),
       h('div', { class: 'meter' }, h('span', { style: `width:${Math.round(ratio * 100)}%` })),
-      h('p', {}, `ごほうびで もらった おかし ${num(got)} こ`),
+      h('p', {}, T.missions.rewardTotal(num(got))),
     ),
-    h('h3', { class: 'rec-sub' }, 'いまのミッション'),
+    h('h3', { class: 'rec-sub' }, T.missions.now),
     now.length
       ? h('div', { class: 'missions' }, h('ul', {}, ...now.map((m) => missionRow(m, s))))
-      : h('p', { class: 'm-all' }, 'ぜんぶ クリア！ ありがとう！'),
-    h('p', { class: 'rec-note' }, `いまのミッションは ${MISSION_SLOTS} つずつ。あそび終わった時に クリアすると、次のミッションが出て ごほうびの おかしが もらえます`),
-    h('h3', { class: 'rec-sub' }, 'ぜんぶのミッション'),
+      : h('p', { class: 'm-all' }, T.missions.allDone),
+    h('p', { class: 'rec-note' }, T.missions.note(MISSION_SLOTS)),
+    h('h3', { class: 'rec-sub' }, T.missions.all),
     h(
       'div',
       { class: 'missions' },
       h('ul', {}, ...MISSIONS.map((m) => missionRow(m, s, s.missions.includes(m.id) ? 'got' : now.includes(m) ? 'now' : ''))),
     ),
-    h('div', { class: 'row' }, btn('とじる', on.close, host.sound, 'primary')),
+    h('div', { class: 'row' }, btn(T.common.close, on.close, host.sound, 'primary')),
   );
 }
 
@@ -483,19 +523,19 @@ export function howToPanel(host: MenuHost, on: { close: () => void; practice?: (
   return h(
     'div',
     { class: 'panel howto' },
-    h('h2', {}, 'あそびかた'),
-    h('p', { class: 'lead' }, `おばけの国に、おかしが降ってくる！ ${BALANCE.duration} 秒で たくさんキャッチしよう。`),
+    h('h2', {}, T.howTo.heading),
+    h('p', { class: 'lead' }, T.howTo.lead(BALANCE.duration)),
     h(
       'ul',
       { class: 'items' },
-      ...kinds.map((k) => h('li', {}, itemCanvas(k, 44), h('span', {}, h('b', {}, ITEM_TEXT[k].name), h('small', {}, ITEM_TEXT[k].note)))),
+      ...kinds.map((k) => h('li', {}, itemCanvas(k, 44), h('span', {}, h('b', {}, T.items[k].name), h('small', {}, T.items[k].note)))),
     ),
     h(
       'div',
       { class: 'tips' },
-      h('p', {}, h('b', {}, 'うごく: '), touch ? '画面のどこでも、指で左右にドラッグ。' : 'マウスを左右に動かす / ← → キー（A D）'),
-      h('p', {}, h('b', {}, 'れんぞく: '), `${BALANCE.chain.window} 秒以内に次をキャッチすると つながって、${BALANCE.chain.step} こごとに点数がアップ（最大 ×${BALANCE.chain.max.toFixed(1)}）。`),
-      h('p', {}, h('b', {}, 'フィーバー: '), 'モカロンでゲージがたまると、シューカロンの雨！ 時間ぎれでも、フィーバーが終わるまで つづくよ。'),
+      h('p', {}, h('b', {}, T.howTo.move), touch ? T.howTo.moveTouch : T.howTo.moveMouse),
+      h('p', {}, h('b', {}, T.howTo.chain), T.howTo.chainText(BALANCE.chain.window, BALANCE.chain.step, BALANCE.chain.max.toFixed(1))),
+      h('p', {}, h('b', {}, T.howTo.fever), T.howTo.feverText),
     ),
     h(
       'div',
@@ -504,16 +544,16 @@ export function howToPanel(host: MenuHost, on: { close: () => void; practice?: (
       h(
         'p',
         {},
-        'ホバギをよけて地面に落とすと、ともだちのスピッキーが泣いて「スピキ」になっちゃう。',
+        T.howTo.spiki,
         h('br'),
-        h('b', {}, touch ? 'スピキをタップ' : 'スピキをクリック（↑キー / スペース）'),
-        'でなぐさめると、おかえしのおかしを投げてくれる！ 泣いている間にもっとホバギが落ちると、おかえしが増えるよ。',
+        h('b', {}, touch ? T.howTo.spikiTap : T.howTo.spikiClick),
+        T.howTo.spikiThen,
         h('br'),
-        h('b', {}, 'ほっぺを むにーっと引っぱってから離す'),
-        'と、おかえしがもう 1 こ！',
+        h('b', {}, T.howTo.cheek),
+        T.howTo.cheekThen,
       ),
     ),
-    h('div', { class: 'row' }, on.practice ? btn('れんしゅうする', on.practice, s) : null, btn('とじる', on.close, s, 'primary')),
+    h('div', { class: 'row' }, on.practice ? btn(T.howTo.practice, on.practice, s) : null, btn(T.common.close, on.close, s, 'primary')),
   );
 }
 
@@ -548,12 +588,12 @@ export function settingsPanel(host: MenuHost, on: { close: () => void }): HTMLEl
   return h(
     'div',
     { class: 'panel settings' },
-    h('h2', {}, 'せってい'),
-    slider('効果音', save.sfxVolume, (v) => (save.sfxVolume = s.sfxVolume = v)),
-    slider('BGM', save.bgmVolume, (v) => (save.bgmVolume = s.bgmVolume = v)),
-    check('音を消す', save.muted, (v) => (save.muted = s.muted = v)),
-    check('画面のゆれを へらす', save.calm, (v) => (save.calm = v)),
-    h('div', { class: 'row' }, btn('とじる', on.close, s, 'primary')),
+    h('h2', {}, T.settings.heading),
+    slider(T.settings.sfx, save.sfxVolume, (v) => (save.sfxVolume = s.sfxVolume = v)),
+    slider(T.settings.bgm, save.bgmVolume, (v) => (save.bgmVolume = s.bgmVolume = v)),
+    check(T.settings.mute, save.muted, (v) => (save.muted = s.muted = v)),
+    check(T.settings.calm, save.calm, (v) => (save.calm = v)),
+    h('div', { class: 'row' }, btn(T.common.close, on.close, s, 'primary')),
   );
 }
 
@@ -573,20 +613,23 @@ export function pausePanel(
   return h(
     'div',
     { class: 'panel pause' },
-    h('h2', {}, 'ひとやすみ'),
+    h('h2', {}, T.pause.heading),
     h(
       'div',
       { class: 'col' },
-      btn('つづける', on.resume, s, 'primary'),
-      on.skip ? btn('れんしゅうを とばす', on.skip, s) : btn('やりなおす', on.retry, s),
-      btn('あそびかた', on.howTo, s),
-      btn('キャラえらびへ', on.select, s),
+      btn(T.pause.resume, on.resume, s, 'primary'),
+      on.skip ? btn(T.pause.skip, on.skip, s) : btn(T.pause.retry, on.retry, s),
+      btn(T.howTo.heading, on.howTo, s),
+      btn(T.pause.select, on.select, s),
     ),
-    rows.length ? h('div', { class: 'missions' }, h('div', { class: 'missions-head' }, h('b', {}, 'ミッション'), h('small', {}, 'おわった時に クリア')), h('ul', {}, ...rows)) : null,
+    rows.length ? h('div', { class: 'missions' }, h('div', { class: 'missions-head' }, h('b', {}, T.missions.head), h('small', {}, T.missions.atEnd)), h('ul', {}, ...rows)) : null,
   );
 }
 
 // ===================================================================== けっか
+
+/** X でシェアする時のリンク */
+const SHARE_URL = 'https://sabanogames.com/entertainments/trickcal-or-treat-2026/';
 
 export interface ResultInfo {
   world: World;
@@ -616,7 +659,7 @@ export function resultPanel(host: MenuHost, info: ResultInfo, on: { retry: () =>
   const id = info.charId;
   const score = w.score;
   const rank = rankOf(score);
-  const tx = CHAR_TEXT[id];
+  const tx = T.chars[id];
   const good = rank === 'SS' || rank === 'S' || rank === 'A';
   const expr: Expr = good ? 'happy' : rank === 'C' ? 'worried' : 'smile';
   const isBest = score > info.prevBest && score > 0;
@@ -629,9 +672,9 @@ export function resultPanel(host: MenuHost, info: ResultInfo, on: { retry: () =>
   const before = titleOf(info.prevSweets);
   const after = titleOf(total);
   const next = nextTitle(total);
-  const rule = ruleOf(info.course, info.day);
-  const courseLabel = info.course === 'daily' ? `今夜のおかし ${dayLabel(info.day)}` : info.course === 'night' ? 'まよなかモード' : '';
-  const bestLabel = info.course === 'daily' ? 'きょうのベスト' : 'ベスト';
+  const rule = ruleText(ruleOf(info.course, info.day));
+  const courseLabel = info.course === 'daily' ? T.result.daily(dayLabel(info.day)) : info.course === 'night' ? T.result.night : '';
+  const bestLabel = info.course === 'daily' ? T.common.dailyBest : T.common.best;
   // ミッション: クリアしたもの → いまのミッション（あたらしく出たものは NEW）
   const now = activeMissions(save);
   const missionRows = [
@@ -661,8 +704,8 @@ export function resultPanel(host: MenuHost, info: ResultInfo, on: { retry: () =>
     h('li', {}, kind ? itemCanvas(kind, 30) : h('span', { class: 'dot' }), h('span', { class: 'k' }, label), h('b', {}, value));
 
   const share = () => {
-    const where = info.course === 'daily' ? `の今夜のおかし（${dayLabel(info.day)}・${rule.name}）` : info.course === 'night' ? 'のまよなかモード' : '';
-    const text = `『${GAME_TITLE}』${where}で${tx.costume}${tx.name}が ${num(score)}点（ランク${rank}）！ #トリッカルオアトリート #トリッカル`;
+    const where = info.course === 'daily' ? T.result.shareDaily(dayLabel(info.day), rule.name) : info.course === 'night' ? T.result.shareNight : '';
+    const text = T.result.shareText(T.docTitle, where, T.common.who(tx.costume, tx.name), num(score), rank);
     const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(SHARE_URL)}`;
     window.open(url, '_blank', 'noopener');
   };
@@ -670,7 +713,7 @@ export function resultPanel(host: MenuHost, info: ResultInfo, on: { retry: () =>
   return h(
     'div',
     { class: 'panel result' },
-    h('h2', {}, 'けっか'),
+    h('h2', {}, T.result.heading),
     h(
       'div',
       { class: 'result-top' },
@@ -679,27 +722,27 @@ export function resultPanel(host: MenuHost, info: ResultInfo, on: { retry: () =>
         'div',
         { class: 'score-box' },
         courseLabel ? h('small', { class: `course-tag ${info.course}` }, courseLabel) : null,
-        h('small', {}, `${tx.costume}${tx.name}`),
+        h('small', {}, T.common.who(tx.costume, tx.name)),
         scoreEl,
-        h('div', { class: 'rank-row' }, stamp, h('span', { class: 'rank-text' }, RANK_TEXT[rank])),
-        isBest ? h('div', { class: 'new' }, 'ベスト更新!') : h('div', { class: 'prev' }, `${bestLabel} ${num(info.prevBest)}`),
+        h('div', { class: 'rank-row' }, stamp, h('span', { class: 'rank-text' }, T.ranks[rank])),
+        isBest ? h('div', { class: 'new' }, T.result.best) : h('div', { class: 'prev' }, `${bestLabel} ${num(info.prevBest)}`),
       ),
     ),
-    h('p', { class: 'line' }, `「${info.line.text}」`, info.line.isNew ? h('small', { class: 'line-new' }, 'NEW セリフ') : null),
+    h('p', { class: 'line' }, T.common.quote(info.line.text), info.line.isNew ? h('small', { class: 'line-new' }, T.result.newLine) : null),
     h(
       'ul',
       { class: 'breakdown' },
-      row('candy', 'キャンディ', `${caught('candy')}`),
-      row('star', 'スター', `${caught('star')}`),
-      row('mokaron', 'モカロン', `${caught('mokaron')}`),
-      row('shucaron', 'シューカロン', `${caught('shucaron')}`),
-      row('hobagi', id === 'joanne' ? 'ホバギを吸った' : 'ホバギに当たった', `${st.hits}`),
-      row(null, 'さいだいれんぞく', `${st.maxChain}`),
-      row(null, 'フィーバー', `${st.fevers} 回`),
-      row(null, 'スピキをなぐさめた', `${st.comforts} 回`),
+      row('candy', T.result.candy, `${caught('candy')}`),
+      row('star', T.result.star, `${caught('star')}`),
+      row('mokaron', T.result.mokaron, `${caught('mokaron')}`),
+      row('shucaron', T.result.shucaron, `${caught('shucaron')}`),
+      row('hobagi', id === 'joanne' ? T.result.drained : T.result.hits, `${st.hits}`),
+      row(null, T.result.maxChain, `${st.maxChain}`),
+      row(null, T.result.fevers, T.common.times(st.fevers)),
+      row(null, T.result.comforts, T.common.times(st.comforts)),
     ),
-    nextRank ? h('p', { class: 'next-rank' }, `ランク${nextRank.id}まで あと ${num(nextRank.min - score)} 点`) : null,
-    info.nightNew ? h('p', { class: 'unlock' }, 'ランクA達成！「まよなか」モードが 解放された！（キャラえらびで）') : null,
+    nextRank ? h('p', { class: 'next-rank' }, T.result.nextRank(nextRank.id, num(nextRank.min - score))) : null,
+    info.nightNew ? h('p', { class: 'unlock' }, T.result.nightOpen) : null,
     missionRows.length
       ? h(
           'div',
@@ -711,19 +754,19 @@ export function resultPanel(host: MenuHost, info: ResultInfo, on: { retry: () =>
     h(
       'p',
       { class: 'title-line' },
-      `おかし +${sweets} こ`,
-      reward ? h('b', { class: 'reward' }, `　ミッションのごほうび +${reward} こ`) : null,
-      `（今までに ${num(total)} こ）`,
-      after && after !== before ? h('b', { class: 'new-title' }, ` 称号「${TITLE_TEXT[after]}」をゲット!`) : null,
-      next && !(after && after !== before) ? h('small', {}, ` つぎの称号まで あと ${num(next.min - total)} こ`) : null,
+      T.result.sweets(sweets),
+      reward ? h('b', { class: 'reward' }, T.result.reward(reward)) : null,
+      T.result.total(num(total)),
+      after && after !== before ? h('b', { class: 'new-title' }, T.result.newTitle(T.titles[after])) : null,
+      next && !(after && after !== before) ? h('small', {}, T.result.toNext(num(next.min - total))) : null,
     ),
-    unplayed.length ? h('p', { class: 'hint-line' }, `まだ あそんでいない: ${unplayed.map((c) => CHAR_TEXT[c].name).join('・')}`) : null,
+    unplayed.length ? h('p', { class: 'hint-line' }, T.result.unplayed(unplayed.map((c) => T.chars[c].name))) : null,
     // スマホで下まで長くなっても、ボタンは画面の下に残す
     h(
       'div',
       { class: 'result-actions' },
-      h('div', { class: 'row' }, btn('キャラえらび', on.select, s), btn('もう一回!', on.retry, s, 'primary')),
-      h('div', { class: 'row small' }, btn('タイトルへ', on.title, s, 'ghost'), btn('X でシェア', share, s, 'ghost share')),
+      h('div', { class: 'row' }, btn(T.result.select, on.select, s), btn(T.result.retry, on.retry, s, 'primary')),
+      h('div', { class: 'row small' }, btn(T.result.title, on.title, s, 'ghost'), btn(T.result.share, share, s, 'ghost share')),
     ),
   );
 }

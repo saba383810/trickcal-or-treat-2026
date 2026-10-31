@@ -1,8 +1,8 @@
 import { it } from 'vitest';
 import { RANKS, rankOf } from '../src/config/balance';
 import { CHAR_ORDER } from '../src/config/characters';
-import { MISSIONS, fits, playValue } from '../src/config/missions';
-import { DAILY_RULES, NIGHT, NORMAL, type CourseId } from '../src/config/rules';
+import { MISSIONS, fits, missionText, playValue } from '../src/config/missions';
+import { DAILY_RULES, NIGHT, NORMAL, ruleText, type CourseId } from '../src/config/rules';
 import { Rng } from '../src/sim/rng';
 import { World } from '../src/sim/world';
 import { Bot, SKILLS } from './bot';
@@ -20,7 +20,7 @@ function pct(sorted: number[], p: number): number {
 }
 
 it('balance report', () => {
-  const lines: string[] = [`ルール: ${RULE.name}　ランク: ${RANKS.map((r) => `${r.id} ${r.min}`).join(' / ')}`];
+  const lines: string[] = [`ルール: ${ruleText(RULE).name}　ランク: ${RANKS.map((r) => `${r.id} ${r.min}`).join(' / ')}`];
   // ミッションごとの、1 回でクリアできた割合（キャラ・コースの決まりがあるものは、そのキャラ・コースの回だけで数える）
   const missionHit = SKILLS.map(() => new Map<string, [number, number]>());
   for (const skill of SKILLS) {
@@ -76,7 +76,7 @@ it('balance report', () => {
       const [ok, n] = hit.get(m.id) ?? [0, 0];
       return n ? `${Math.round((ok / n) * 100)}%`.padStart(5) : '    −';
     });
-    lines.push(`${cells.join(' ')}  ${m.text}`);
+    lines.push(`${cells.join(' ')}  ${missionText(m)}`);
   }
   console.log(lines.join('\n'));
 });

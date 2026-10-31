@@ -2,6 +2,7 @@
 import type { RankId } from './config/balance';
 import { CHAR_ORDER, type CharId } from './config/characters';
 import type { CourseId } from './config/rules';
+import { isLang, type Lang } from './i18n';
 
 const KEY = 'trickcal-or-treat:v1';
 
@@ -44,6 +45,8 @@ export interface SaveData {
   muted: boolean;
   /** 画面の揺れを減らす */
   calm: boolean;
+  /** 遊ぶ言語。null = まだ選んでいない（ブラウザの言語から決める） */
+  lang: Lang | null;
 }
 
 function defaults(): SaveData {
@@ -68,6 +71,7 @@ function defaults(): SaveData {
     bgmVolume: 0.5,
     muted: false,
     calm: false,
+    lang: null,
   };
 }
 
@@ -91,7 +95,9 @@ export function loadSave(): SaveData {
     };
     if (!CHAR_ORDER.includes(d.lastChar)) d.lastChar = 'kommy';
     if (!['normal', 'daily', 'night'].includes(d.lastCourse)) d.lastCourse = 'normal';
-    // 前の版の記録: もう遊んだことがあれば、れんしゅうは出さない（あそびかたから できる）
+    // 前の版の記録には言語がない（知らない言語も、まだ選んでいないことにする）
+    if (!isLang(d.lang)) d.lang = null;
+    // 前の版の記録: もう遊んだことがあれば、れんしゅうは出さない（キャラえらび・あそびかたから できる）
     if (data.tutorialDone === undefined) d.tutorialDone = d.plays > 0;
     // 前の版の記録: ベストがあるキャラは 1 回は遊んでいる
     if (!data.charPlays) for (const id of CHAR_ORDER) if (d.best[id] !== undefined) d.charPlays[id] = 1;

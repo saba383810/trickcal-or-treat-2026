@@ -5,6 +5,7 @@ import type { Sound } from '../audio/sound';
 import { BALANCE, type ItemKind } from '../config/balance';
 import type { CharId } from '../config/characters';
 import { talkLine, type TalkId } from '../config/lines';
+import { num, T } from '../i18n';
 import { MochiBody } from '../mochi/body';
 import type { GameEvent, Item, World } from '../sim/world';
 import { CHAR_SPECS, SPIKEY, SPIKI } from './draw/characters';
@@ -38,7 +39,10 @@ const TOAST = 2.6;
 /** キャラのひとことを出しておく秒数と、次に話すまでの間 */
 const TALK = 1.8;
 const TALK_GAP = 7;
-const CRY_TEXT = ['', 'ｳｪｪﾝ…', 'ｳｱｱｰﾝ!!', 'ｳｱｱｱｱｱﾝ!!!'];
+/** この秒数のうちに続けてスピキをつつくと、ちがうひとこと */
+const POKE_AGAIN = 1.5;
+
+const oneOf = (list: readonly string[]) => list[Math.floor(Math.random() * list.length)];
 
 interface Banner {
   text: string;
@@ -100,6 +104,8 @@ export class GameView {
   private spikiBody = new MochiBody();
   private spikiPress: SpikiPress | null = null;
   private spikiTalk: { text: string; t: number; max: number; color: string } | null = null;
+  /** 前に泣いていないスピキをつついた時刻（ミリ秒） */
+  private pokedAt = -Infinity;
   /** 遊んでいるキャラのひとこと */
   private talk: { text: string; t: number } | null = null;
   private talkGap = 0;
@@ -302,14 +308,19 @@ export class GameView {
     const w = this.world;
     if (!this.inputEnabled) return;
     if (!w.crying) {
-      if (w.spiki.happy <= 0) this.say('ﾁｮﾜﾖ?', 0.7, C.white);
+      if (w.spiki.happy <= 0) {
+        const now = performance.now();
+        const again = now - this.pokedAt < POKE_AGAIN * 1000;
+        this.pokedAt = now;
+        this.say(again ? T.game.pokeAgain : T.game.poke, again ? 1.3 : 0.7, C.white);
+      }
       return;
     }
     const level = w.spiki.level;
     if (!w.comfort(extra)) return;
     if (extra > 0) {
       const h = this.spikiHead();
-      this.fx.float('もちもち +1!', h.x, h.y - h.r * 1.6, { color: C.pink, size: 24, max: 1.1 });
+      this.fx.float(T.game.mochiBonus, h.x, h.y - h.r * 1.6, { color: C.pink, size: 24, max: 1.1 });
     }
     this.sound.comfort(level);
   }
@@ -457,7 +468,7 @@ export class GameView {
         const y = fy(L, w.catchY) - L.headR;
         if (e.guarded) {
           this.setExpr('angry', 0.5);
-          this.fx.float('ガード!', x, y - 20, { color: C.butter, size: 30 });
+          this.fx.float(T.game.guard, x, y - 20, { color: C.butter, size: 30 });
           this.fx.float(`${e.pts}`, x + 40, y + 10, { color: C.bad, size: 24 });
           this.fx.burst(x, y, 'dot', 8, '#fff3d6', 260);
           this.sound.guard();
@@ -475,7 +486,7 @@ export class GameView {
       case 'drain': {
         const x = fx(L, e.x);
         const y = fy(L, w.catchY) - L.headR;
-        this.fx.float('ちゅーっ', x, y - 24, { color: '#ffb0b8', stroke: '#6b1e3a', size: 28 });
+        this.fx.float(T.game.drain, x, y - 24, { color: '#ffb0b8', stroke: '#6b1e3a', size: 28 });
         this.fx.burst(x, y, 'dot', 10, C.orange, 160);
         this.fx.burst(x, y, 'heart', 2, C.bad, 90);
         this.flying.push({ x, y: y - L.headR * 1.2, vx: 0, vy: 0, rot: 0, vr: 6, t: 0, suck: true });
@@ -495,7 +506,7 @@ export class GameView {
         break;
       case 'chainBreak':
         if (e.chain >= 10) {
-          this.fx.float(`${e.chain}れんぞく おしまい`, this.chainAnchor().x, this.chainAnchor().y + 40, { color: '#d9cdf0', size: 20, rise: 20 });
+          this.fx.float(T.game.chainEnd(e.chain), this.chainAnchor().x, this.chainAnchor().y + 40, { color: '#d9cdf0', size: 20, rise: 20 });
           this.sound.chainBreak();
         }
         break;
@@ -510,26 +521,26 @@ export class GameView {
         break;
       case 'spikiCry': {
         const h = this.spikiHead();
-        this.say(CRY_TEXT[e.level], BALANCE.spiki.cry, '#e4f6ff');
+        this.say(T.game.cry[e.level - 1] ?? '', BALANCE.spiki.cry, '#e4f6ff');
         this.fx.burst(h.x, h.y, 'tear', 6, '#9fdcf5', 220);
         this.sound.wail(e.level);
         break;
       }
       case 'spikiCalm':
-        this.say('ｸﾞｽﾝ…', 1.0, C.white);
+        this.say(oneOf(T.game.calm), 1.2, C.white);
         this.sound.sniff();
         break;
       case 'comfort': {
         const h = this.spikiHead();
-        this.say('ﾁｮﾜﾖ!', 1.3, '#fff2a8');
+        this.say(oneOf(T.game.thanks), 1.3, '#fff2a8');
         this.fx.burst(h.x, h.y, 'heart', 8, C.pink, 200);
-        this.fx.float(`おかえし ×${e.gifts}`, h.x, h.y - h.r * 2.4, { color: C.gold, size: 26, max: 1.3 });
+        this.fx.float(T.game.gifts(e.gifts), h.x, h.y - h.r * 2.4, { color: C.gold, size: 26, max: 1.3 });
         for (let i = 0; i < e.gifts; i++) window.setTimeout(() => this.sound.toss(), i * BALANCE.spiki.throwGap * 1000);
         this.hintComfort = false;
         break;
       }
       case 'feverStart':
-        this.banner('フィーバー!!', C.fever, 1.5, 88, 'シューカロンの雨!');
+        this.banner(T.game.fever, C.fever, 1.5, 88, T.game.feverSub);
         this.sound.feverStart();
         this.setExpr('happy', 1);
         this.fx.burst(fx(L, w.player.x), fy(L, w.catchY), 'heart', 12, C.fever, 320);
@@ -540,7 +551,7 @@ export class GameView {
         this.bgm.mode = w.spurt ? 'hurry' : 'normal';
         break;
       case 'lastSpurt':
-        this.banner('ラストスパート!', C.orange, 1.3, 64);
+        this.banner(T.game.lastSpurt, C.orange, 1.3, 64);
         this.sound.lastSpurt();
         if (w.fever <= 0) this.bgm.mode = 'hurry';
         break;
@@ -552,7 +563,7 @@ export class GameView {
         // 残っているお菓子は、ぽんっと消える
         for (const it of w.items) this.fx.burst(fx(L, it.x), fy(L, it.y), 'star', 3, KIND_COLOR[it.kind], 160);
         w.items = [];
-        this.banner('おしまい!', C.gold, 2.4, 92);
+        this.banner(T.game.timeUp, C.gold, 2.4, 92);
         this.sound.timeUp();
         this.setExpr('happy', 3);
         break;
@@ -673,11 +684,14 @@ export class GameView {
     const s = this.L.spiki;
     const size = Math.max(16, s.r * 0.46);
     const pop = Math.min(1, tk.t * 8);
-    const x = Math.min(this.L.w - size * 4, h.x - s.r * 0.6);
-    const y = h.y - s.r * (this.world.crying ? 3.55 : 2.1) + (1 - pop) * 10;
     c.save();
+    c.font = font(size);
+    // 長いひとことでも、画面の端からはみ出さないように寄せる
+    const half = (c.measureText(tk.text).width + size * 1.1) / 2;
+    const x = Math.max(half + 6, Math.min(this.L.w - Math.max(size * 4, half + 6), h.x - s.r * 0.6));
+    const y = h.y - s.r * (this.world.crying ? 3.55 : 2.1) + (1 - pop) * 10;
     c.globalAlpha = Math.min(1, (tk.max - tk.t) * 4);
-    bubble(c, tk.text, x, y, size, h.x - s.r * 0.2, tk.color);
+    bubble(c, tk.text, x, y, size, Math.min(x + half - size, h.x - s.r * 0.2), tk.color);
     c.restore();
   }
 
@@ -897,20 +911,20 @@ export class GameView {
     const s = L.score;
     this.panel(c, s);
     const labelSize = L.portrait ? 18 : 20;
-    outlined(c, 'スコア', s.x + 18, s.y + labelSize * 0.9, { size: labelSize, fill: C.gold, align: 'left', width: 4 });
-    const num = Math.round(this.shownScore).toLocaleString('ja-JP');
-    const ns = Math.min(s.h * 0.52, (s.w - 30) / Math.max(3, num.length * 0.55));
+    outlined(c, T.game.score, s.x + 18, s.y + labelSize * 0.9, { size: labelSize, fill: C.gold, align: 'left', width: 4 });
+    const shown = num(this.shownScore);
+    const ns = Math.min(s.h * 0.52, (s.w - 30) / Math.max(3, shown.length * 0.55));
     c.save();
     c.translate(s.x + s.w - 18, s.y + s.h * 0.64);
     const sp = 1 + this.scorePop * 0.08;
     c.scale(sp, sp);
-    outlined(c, num, 0, 0, { size: ns, font: popFont(ns), align: 'right', width: 7 });
+    outlined(c, shown, 0, 0, { size: ns, font: popFont(ns), align: 'right', width: 7 });
     c.restore();
 
     // のこり時間
     const t = L.timer;
     this.panel(c, t, w.overtime);
-    outlined(c, w.practice ? 'れんしゅう' : w.overtime ? 'えんちょう!' : 'のこり', t.x + 18, t.y + labelSize * 0.9, {
+    outlined(c, w.practice ? T.game.practice : w.overtime ? T.game.overtime : T.game.left, t.x + 18, t.y + labelSize * 0.9, {
       size: labelSize,
       fill: w.overtime ? C.fever : C.gold,
       align: 'left',
@@ -969,7 +983,7 @@ export class GameView {
     outlined(c, `${on ? w.chain : 0}`, 0, 0, { size, font: popFont(size), align: 'left', width: 6 });
     c.font = popFont(size);
     const nw = c.measureText(`${on ? w.chain : 0}`).width;
-    outlined(c, 'れんぞく', nw + 6, size * 0.12, { size: size * 0.5, align: 'left', fill: '#e5dcff', width: 4 });
+    outlined(c, T.game.chain, nw + 6, size * 0.12, { size: size * 0.5, align: 'left', fill: '#e5dcff', width: 4 });
     c.restore();
     const mult = w.multiplier;
     const ms = size * 0.72;
@@ -991,7 +1005,7 @@ export class GameView {
     const fever = w.fever > 0;
     this.panel(c, r, fever);
     const labelSize = L.portrait ? 16 : 18;
-    if (!L.portrait) outlined(c, fever ? 'フィーバー!!' : 'フィーバーゲージ', r.x + 16, r.y + labelSize * 0.95, { size: labelSize, fill: fever ? C.fever : C.gold, align: 'left', width: 4 });
+    if (!L.portrait) outlined(c, fever ? T.game.fever : T.game.feverGauge, r.x + 16, r.y + labelSize * 0.95, { size: labelSize, fill: fever ? C.fever : C.gold, align: 'left', width: 4 });
     const top = L.portrait ? r.y : r.y + labelSize * 1.6;
     const ht = r.y + r.h - top;
     const x0 = r.x + 14;
@@ -1008,7 +1022,7 @@ export class GameView {
       roundRect(c, x0, by, wd * k, 22, 11);
       c.fillStyle = g;
       c.fill();
-      if (L.portrait) outlined(c, 'フィーバー!!', x0 + wd / 2, by + 11, { size: 18, fill: C.white, stroke: '#9c2a6a', width: 4 });
+      if (L.portrait) outlined(c, T.game.fever, x0 + wd / 2, by + 11, { size: 18, fill: C.white, stroke: '#9c2a6a', width: 4 });
       return;
     }
     const n = w.feverNeed;
@@ -1038,7 +1052,7 @@ export class GameView {
     const L = this.L;
     const w = this.world;
     if (this.hintMove && !this.moved && w.time < 6 && this.inputEnabled) {
-      const text = this.touchUI ? '指で左右にドラッグして うごく' : '← → キー / マウスで うごく';
+      const text = this.touchUI ? T.game.hintMoveTouch : T.game.hintMoveKey;
       const a = 0.6 + 0.4 * Math.sin(this.t * 5);
       c.save();
       c.globalAlpha = a;
@@ -1047,7 +1061,7 @@ export class GameView {
     }
     if (this.hintComfort && w.crying && !w.over) {
       const s = L.spiki;
-      const text = this.touchUI ? 'スピキを タップで なぐさめて!' : 'Space キーで なぐさめて!';
+      const text = this.touchUI ? T.game.hintComfortTouch : T.game.hintComfortKey;
       const size = L.portrait ? 20 : 20;
       const y = s.feet + s.r * 0.75;
       const a = 0.7 + 0.3 * Math.sin(this.t * 6);
@@ -1083,7 +1097,7 @@ export class GameView {
     c.lineWidth = 2.5;
     c.stroke();
     // 何ステップ目か
-    outlined(c, `れんしゅう ${co.step}/5`, x + 14 * k, y - 2 * k, { size: 13 * k, fill: C.gold, align: 'left', width: 4 });
+    outlined(c, T.game.coachStep(co.step, 5), x + 14 * k, y - 2 * k, { size: 13 * k, fill: C.gold, align: 'left', width: 4 });
     outlined(c, co.text, f.x + f.w / 2, y + 30 * k, { size: 22 * k, font: popFont(22 * k), fill: C.white, width: 6 });
     if (co.sub) outlined(c, co.sub, f.x + f.w / 2, y + 58 * k, { size: 14 * k, fill: '#d9cdf0', width: 4 });
     c.restore();
@@ -1111,7 +1125,7 @@ export class GameView {
     c.stroke();
     c.restore();
     c.save();
-    const label = co.key ?? 'タップ!';
+    const label = co.key ?? T.game.tap;
     const size = 18 * a;
     c.font = popFont(size);
     const lw = c.measureText(label).width + 24 * a;
@@ -1139,7 +1153,7 @@ export class GameView {
     const outK = Math.max(0, (ts.t - (TOAST - 0.3)) / 0.3);
     const ease = (x: number) => 1 - Math.pow(1 - x, 3);
     const y = f.y + 14 * k - (1 - ease(inK) + ease(outK)) * 40 * k;
-    const head = 'ミッション クリア!';
+    const head = T.game.missionClear;
     c.save();
     c.globalAlpha = Math.min(ease(inK), 1 - outK);
     c.font = font(17 * k);

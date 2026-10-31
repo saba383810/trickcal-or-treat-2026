@@ -1,4 +1,5 @@
-// 開発用: sabanogames のカードの絵（?kind=thumb 800×515）と、リンクの絵（?kind=og 1200×630）を描く（本番ビルドには含めない）
+// 開発用: sabanogames のカードの絵（?kind=thumb 800×515）と、リンクの絵（?kind=og 1200×630）を描く（本番ビルドには含めない）。&lang=ko|en でほかの言語
+import { isLang, setLang, T } from '../i18n';
 import { CHAR_SPECS, SPIKI } from '../view/draw/characters';
 import { FEET_R, CROUCH_FEET_R, drawChibi, type Expr } from '../view/draw/chibi';
 import { drawItem } from '../view/draw/items';
@@ -8,7 +9,10 @@ import { bubble } from '../view/draw/ui';
 import type { Layout } from '../view/layout';
 import { C, font } from '../view/palette';
 
-const og = new URLSearchParams(location.search).get('kind') !== 'thumb';
+const q = new URLSearchParams(location.search);
+const og = q.get('kind') !== 'thumb';
+const lang = q.get('lang');
+if (isLang(lang)) setLang(lang);
 const W = og ? 1200 : 800;
 const H = og ? 630 : 515;
 const canvas = document.getElementById('c') as HTMLCanvasElement;
@@ -77,7 +81,8 @@ const L: Layout = {
   pauseBtn: { x: 0, y: 0, w: 0, h: 0 },
 };
 
-void Promise.all([document.fonts.load(font(80), 'ホバギ・オア・トリート！'), document.fonts.load(font(20), 'トリッカル非公式ファンゲーム')]).then(draw);
+// 空白はぬいて読み込む（空白を入れると 英字の字形まで先に読まれて、日本語の絵が 前と変わってしまう）
+void Promise.all([document.fonts.load(font(80), T.logo.join('')), document.fonts.load(font(20), T.title.sub.replace(/\s/g, ''))]).then(draw);
 
 function draw(): void {
   // 上のふちの飾りは、タイトルの後ろにかける
@@ -90,7 +95,7 @@ function draw(): void {
 
   // スピキ（泣いてる）
   drawChibi(c, SPIKI, sx, sy, sr, { expr: 'worried', t: 0.3, turn: -1 });
-  bubble(c, 'ｳｱｱｰﾝ!!', sx - 0.8 * sr, sy - sr * 2.1, 22 * k, sx - 0.2 * sr, '#e4f6ff');
+  bubble(c, T.game.cry[1], sx - 0.8 * sr, sy - sr * 2.1, 22 * k, sx - 0.2 * sr, '#e4f6ff');
 
   // 降ってくるお菓子と、地面に並べたお菓子
   [...ART.items, ...ART.floor].forEach(([kind, x, y, r], i) => drawItem(c, kind, x, y, r, { t: 0.4, phase: i * 1.3, id: i }));
@@ -109,7 +114,7 @@ function draw(): void {
   const { x: tx, pill: py } = ART.title;
   c.save();
   c.font = font(20 * k);
-  const pill = 'トリッカル 非公式ファンゲーム';
+  const pill = T.title.sub;
   const pw = c.measureText(pill).width + 34 * k;
   c.fillStyle = 'rgba(40, 20, 70, 0.85)';
   c.strokeStyle = 'rgba(255,255,255,0.45)';

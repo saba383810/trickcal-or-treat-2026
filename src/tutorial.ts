@@ -2,6 +2,7 @@
 // 動く → お菓子を 3 こキャッチ → ホバギをよける → 泣いたスピキをなぐさめる → おかえしをキャッチ → 本番へ。
 // お菓子はここから 1 こずつ降らせ、時間切れにはならない（World.practice）。
 import { BALANCE } from './config/balance';
+import { T } from './i18n';
 import type { World } from './sim/world';
 
 type Step = 'move' | 'catch' | 'dodge' | 'comfort' | 'gifts' | 'done';
@@ -105,29 +106,29 @@ export class Tutorial {
       case 'move':
         return {
           step: 1,
-          text: touch ? '画面を 左右にドラッグして うごこう' : '← → キー か マウスで うごこう',
-          sub: 'まずは れんしゅう！（ポーズから とばせます）',
+          text: touch ? T.tutorial.moveTouch : T.tutorial.moveKey,
+          sub: T.tutorial.moveSub,
         };
       case 'catch':
-        return { step: 2, text: `おかしを 頭で キャッチ！（${got}/${CATCH_GOAL}）`, sub: 'つづけて取ると れんぞくで 点が ふえるよ' };
+        return { step: 2, text: T.tutorial.catch(got, CATCH_GOAL), sub: T.tutorial.catchSub };
       case 'dodge':
         return {
           step: 3,
-          text: this.missed ? 'あたっちゃった！ もう一回 よけよう' : 'かぼちゃ（ホバギ）は よけよう！',
-          sub: '落ちる先に 影が出るよ。よけると スピキが泣いちゃう',
+          text: this.missed ? T.tutorial.dodgeMissed : T.tutorial.dodge,
+          sub: T.tutorial.dodgeSub,
         };
       case 'comfort':
         return {
           step: 4,
-          text: touch ? '泣いている スピキを タップ！' : 'Space キーで スピキを なぐさめよう！',
-          sub: touch ? 'ほっぺを 引っぱって 離すと おかえしが +1' : 'スピキを クリックしても なぐさめられるよ',
+          text: touch ? T.tutorial.comfortTouch : T.tutorial.comfortKey,
+          sub: touch ? T.tutorial.comfortSubTouch : T.tutorial.comfortSubKey,
           spiki: true,
           key: touch ? undefined : 'Space',
         };
       case 'gifts':
-        return { step: 5, text: 'おかえしだ！ キャッチしよう', sub: 'もっと泣かせてから なぐさめると、おかえしが ふえるよ' };
+        return { step: 5, text: T.tutorial.gifts, sub: T.tutorial.giftsSub };
       case 'done':
-        return { step: STEPS, text: 'じゅんび OK！ 本番 スタート！', sub: `モカロンを ${this.world.feverNeed}こ 集めると フィーバー！` };
+        return { step: STEPS, text: T.tutorial.done, sub: T.tutorial.doneSub(this.world.feverNeed) };
     }
   }
 }

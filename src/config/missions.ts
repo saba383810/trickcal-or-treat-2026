@@ -3,6 +3,7 @@
 import { RANKS, type RankId } from './balance';
 import { CHAR_ORDER, type CharId } from './characters';
 import type { CourseId } from './rules';
+import { num, T } from '../i18n';
 import type { Stats } from '../sim/world';
 import type { SaveData } from '../storage';
 
@@ -14,9 +15,9 @@ export interface Play {
   stats: Stats;
 }
 
+/** 文は T.missions.text（id ごと）。ランクのミッションは T.missions.rank で点数を入れる */
 export interface Mission {
   id: string;
-  text: string;
   goal: number;
   /** ごほうびのおかし */
   reward: number;
@@ -30,6 +31,8 @@ export interface Mission {
   char?: CharId;
   /** このコースで遊んだ時だけ */
   course?: CourseId;
+  /** ランクのミッション（このランクの点数をとる） */
+  rank?: RankId;
 }
 
 /** 一度にならぶミッションの数 */
@@ -38,12 +41,11 @@ export const MISSION_SLOTS = 3;
 const sweets = (s: Stats) => s.caught.candy + s.caught.star + s.caught.mokaron + s.caught.shucaron;
 const rankMin = (id: RankId) => RANKS.find((r) => r.id === id)!.min;
 const atLeast = (r: RankId | undefined, id: RankId) => r !== undefined && rankMin(r) >= rankMin(id);
-const count = <T>(rec: Partial<Record<CharId, T>>, ok: (v: T) => boolean) => Object.values(rec).filter((v) => v !== undefined && ok(v as T)).length;
+const count = <V>(rec: Partial<Record<CharId, V>>, ok: (v: V) => boolean) => Object.values(rec).filter((v) => v !== undefined && ok(v as V)).length;
 
 /** 遊んでいる途中で数えられるもの */
-const live = (id: string, text: string, goal: number, reward: number, play: (p: Play) => number, more: Partial<Mission> = {}): Mission => ({
+const live = (id: string, goal: number, reward: number, play: (p: Play) => number, more: Partial<Mission> = {}): Mission => ({
   id,
-  text,
   goal,
   reward,
   play,
@@ -54,7 +56,7 @@ const live = (id: string, text: string, goal: number, reward: number, play: (p: 
 /** ランク（おしまいで決まる） */
 const rank = (id: string, r: RankId, reward: number, more: Partial<Mission> = {}): Mission => ({
   id,
-  text: `ランク ${r} を とる（${rankMin(r).toLocaleString('ja-JP')}点）`,
+  rank: r,
   goal: rankMin(r),
   reward,
   play: (p) => p.score,
@@ -62,51 +64,57 @@ const rank = (id: string, r: RankId, reward: number, more: Partial<Mission> = {}
 });
 
 export const MISSIONS: Mission[] = [
-  { id: 'first', text: 'さいごまで あそぶ', goal: 1, reward: 20, play: () => 1 },
-  live('candy15', 'キャンディを 15こ キャッチ', 15, 20, (p) => p.stats.caught.candy),
-  live('comfort1', '泣いたスピキを なぐさめる', 1, 20, (p) => p.stats.comforts),
-  live('fever1', 'フィーバーに なる', 1, 30, (p) => p.stats.fevers),
-  live('chain20', 'れんぞく 20', 20, 30, (p) => p.stats.maxChain),
+  { id: 'first', goal: 1, reward: 20, play: () => 1 },
+  live('candy15', 15, 20, (p) => p.stats.caught.candy),
+  live('comfort1', 1, 20, (p) => p.stats.comforts),
+  live('fever1', 1, 30, (p) => p.stats.fevers),
+  live('chain20', 20, 30, (p) => p.stats.maxChain),
   rank('rankB', 'B', 30),
-  live('star8', 'スターキャンディを 8こ キャッチ', 8, 30, (p) => p.stats.caught.star),
-  live('dodge8', 'ホバギを 8こ よける', 8, 30, (p) => p.stats.cries),
-  { id: 'chars2', text: '2人で あそぶ', goal: 2, reward: 30, total: (s) => count(s.charPlays, (n) => n > 0) },
-  { id: 'cheek10', text: 'ほっぺを 10かい のばす（タイトルでも）', goal: 10, reward: 20, total: (s) => s.cheek.pulls },
-  live('shuca15', 'シューカロンを 15こ キャッチ', 15, 30, (p) => p.stats.caught.shucaron),
-  live('gift6', 'スピキの おかえしを 6こ キャッチ', 6, 40, (p) => p.stats.gifts),
-  { id: 'daily1', text: '「今夜のおかし」で あそぶ', goal: 1, reward: 40, play: () => 1, course: 'daily' },
-  live('chain40', 'れんぞく 40', 40, 40, (p) => p.stats.maxChain),
-  live('comfortLv2', 'スピキが 2かい 泣いてから なぐさめる', 2, 40, (p) => p.stats.maxComfort),
-  live('fever2', '1かいで フィーバー 2かい', 2, 40, (p) => p.stats.fevers),
-  live('sweets100', '1かいで おかしを 100こ キャッチ', 100, 40, (p) => sweets(p.stats)),
+  live('star8', 8, 30, (p) => p.stats.caught.star),
+  live('dodge8', 8, 30, (p) => p.stats.cries),
+  { id: 'chars2', goal: 2, reward: 30, total: (s) => count(s.charPlays, (n) => n > 0) },
+  { id: 'cheek10', goal: 10, reward: 20, total: (s) => s.cheek.pulls },
+  live('shuca15', 15, 30, (p) => p.stats.caught.shucaron),
+  live('gift6', 6, 40, (p) => p.stats.gifts),
+  { id: 'daily1', goal: 1, reward: 40, play: () => 1, course: 'daily' },
+  live('chain40', 40, 40, (p) => p.stats.maxChain),
+  live('comfortLv2', 2, 40, (p) => p.stats.maxComfort),
+  live('fever2', 2, 40, (p) => p.stats.fevers),
+  live('sweets100', 100, 40, (p) => sweets(p.stats)),
   rank('rankA', 'A', 50),
-  live('elfinStar', 'エルフィンで スターキャンディを 15こ', 15, 50, (p) => p.stats.caught.star, { char: 'elfin' }),
-  live('butterGuard', 'バターで ホバギを 3かい うけとめる', 3, 50, (p) => p.stats.hits, { char: 'butter' }),
-  { id: 'chars5', text: '5人 ぜんいんで あそぶ', goal: 5, reward: 50, total: (s) => count(s.charPlays, (n) => n > 0) },
-  { id: 'cheekAll', text: '5人 ぜんいんの ほっぺを のばす', goal: 5, reward: 40, total: (s) => CHAR_ORDER.filter((c) => (s.cheek.by[c] ?? 0) > 0).length },
-  { id: 'lines10', text: 'セリフずかんを 10こ うめる', goal: 10, reward: 50, total: (s) => s.lines.length },
-  live('kommyChain', 'コミーで れんぞく 50', 50, 50, (p) => p.stats.maxChain, { char: 'kommy' }),
-  live('comfort5', '1かいで スピキを 5かい なぐさめる', 5, 50, (p) => p.stats.comforts),
-  live('yomiFever', 'ヨミで フィーバー 3かい', 3, 50, (p) => p.stats.fevers, { char: 'yomi' }),
-  { id: 'noHit', text: 'ホバギに 1かいも 当たらずに 3,000点', goal: 1, reward: 60, play: (p) => (p.stats.hits === 0 && p.score >= 3000 ? 1 : 0) },
-  live('joanneDrain', 'ジョアンで ホバギを 3こ 吸う', 3, 60, (p) => p.stats.caught.hobagi, { char: 'joanne' }),
-  live('comfortLv3', 'スピキが 3かい 泣いてから なぐさめる', 3, 60, (p) => p.stats.maxComfort),
-  { id: 'cheekSulk', text: 'ほっぺを しつこく のばす（つづけて 5かい）', goal: 1, reward: 30, total: (s) => s.cheek.sulks },
-  live('chain80', 'れんぞく 80', 80, 60, (p) => p.stats.maxChain),
-  live('feverScore', 'フィーバー中に 3,000点', 3000, 60, (p) => p.stats.feverScore),
-  { id: 'daily3', text: '「今夜のおかし」を 3日 あそぶ', goal: 3, reward: 100, total: (s) => s.dailyDays },
-  { id: 'cheek100', text: 'ほっぺを 100かい のばす', goal: 100, reward: 60, total: (s) => s.cheek.pulls },
-  { id: 'lines30', text: 'セリフずかんを 30こ うめる', goal: 30, reward: 100, total: (s) => s.lines.length },
+  live('elfinStar', 15, 50, (p) => p.stats.caught.star, { char: 'elfin' }),
+  live('butterGuard', 3, 50, (p) => p.stats.hits, { char: 'butter' }),
+  { id: 'chars5', goal: 5, reward: 50, total: (s) => count(s.charPlays, (n) => n > 0) },
+  { id: 'cheekAll', goal: 5, reward: 40, total: (s) => CHAR_ORDER.filter((c) => (s.cheek.by[c] ?? 0) > 0).length },
+  { id: 'lines10', goal: 10, reward: 50, total: (s) => s.lines.length },
+  live('kommyChain', 50, 50, (p) => p.stats.maxChain, { char: 'kommy' }),
+  live('comfort5', 5, 50, (p) => p.stats.comforts),
+  live('yomiFever', 3, 50, (p) => p.stats.fevers, { char: 'yomi' }),
+  { id: 'noHit', goal: 1, reward: 60, play: (p) => (p.stats.hits === 0 && p.score >= 3000 ? 1 : 0) },
+  live('joanneDrain', 3, 60, (p) => p.stats.caught.hobagi, { char: 'joanne' }),
+  live('comfortLv3', 3, 60, (p) => p.stats.maxComfort),
+  { id: 'cheekSulk', goal: 1, reward: 30, total: (s) => s.cheek.sulks },
+  live('chain80', 80, 60, (p) => p.stats.maxChain),
+  live('feverScore', 3000, 60, (p) => p.stats.feverScore),
+  { id: 'daily3', goal: 3, reward: 100, total: (s) => s.dailyDays },
+  { id: 'cheek100', goal: 100, reward: 60, total: (s) => s.cheek.pulls },
+  { id: 'lines30', goal: 30, reward: 100, total: (s) => s.lines.length },
   rank('rankS', 'S', 80),
-  { id: 'allA', text: '5人 ぜんいんで ランク A（ふつう）', goal: 5, reward: 100, total: (s) => count(s.rank, (r) => atLeast(r, 'A')) },
-  live('sweets180', '1かいで おかしを 180こ キャッチ', 180, 80, (p) => sweets(p.stats)),
-  { id: 'night1', text: '「まよなか」で あそぶ', goal: 1, reward: 80, play: () => 1, course: 'night' },
-  live('chain150', 'れんぞく 150', 150, 100, (p) => p.stats.maxChain),
-  rank('nightA', 'A', 100, { text: '「まよなか」で ランク A を とる', course: 'night' }),
+  { id: 'allA', goal: 5, reward: 100, total: (s) => count(s.rank, (r) => atLeast(r, 'A')) },
+  live('sweets180', 180, 80, (p) => sweets(p.stats)),
+  { id: 'night1', goal: 1, reward: 80, play: () => 1, course: 'night' },
+  live('chain150', 150, 100, (p) => p.stats.maxChain),
+  rank('nightA', 'A', 100, { course: 'night' }),
   rank('rankSS', 'SS', 150),
-  { id: 'allS', text: '5人 ぜんいんで ランク S（ふつう）', goal: 5, reward: 200, total: (s) => count(s.rank, (r) => atLeast(r, 'S')) },
-  rank('nightS', 'S', 200, { text: '「まよなか」で ランク S を とる', course: 'night' }),
+  { id: 'allS', goal: 5, reward: 200, total: (s) => count(s.rank, (r) => atLeast(r, 'S')) },
+  rank('nightS', 'S', 200, { course: 'night' }),
 ];
+
+/** ミッションの文（いまの言語） */
+export function missionText(m: Mission): string {
+  const text: Record<string, string | undefined> = T.missions.text;
+  return text[m.id] ?? (m.rank ? T.missions.rank(m.rank, num(rankMin(m.rank))) : m.id);
+}
 
 /** いまのミッション（まだのものから、リストの順に） */
 export function activeMissions(save: SaveData): Mission[] {

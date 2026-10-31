@@ -1,6 +1,9 @@
-// タイトルのロゴ「ホバギ / オア / トリート！」。タイトル画面とサムネイル（src/dev/art.ts）で同じものを描く。
+// タイトルのロゴ「ホバギ / オア / トリート！」（3 行の字は T.logo）。タイトル画面とサムネイル（src/dev/art.ts）で同じものを描く。
 // 文字は 1 字ずつ少し傾けて、かぼちゃ（すじ）・おばけ（うす緑）・キャンディ（しま）の柄とつやを入れる。
-// 3 行は「バ」「オア」「リーのあいだ」がまっすぐ縦にそろう。絵（ホバギ・おばけ・コウモリ・キャンディ）はそのまわりに置くだけで、そろえには入れない。
+// 日本語の 3 行は「バ」「オア」「リーのあいだ」がまっすぐ縦にそろう。ほかの言語は 1 行ずつ まん中に置き、はばに入らない行は字を小さくする。
+// 絵（ホバギ・おばけ・コウモリ・キャンディ）は字のまわりに置くだけで、そろえには入れない。
+import { T } from '../../i18n';
+import { ja } from '../../i18n/ja';
 import { C, font } from '../palette';
 import { drawItem } from './items';
 import { bat, ghost } from './scene';
@@ -31,16 +34,21 @@ interface Glyph {
 }
 
 /** (cx, top) を上のまん中にして、文字の大きさ s で描く */
-export function drawLogo(c: CanvasRenderingContext2D, cx: number, top: number, s: number): void {
+export function drawLogo(c: CanvasRenderingContext2D, cx: number, top: number, s: number, lines: readonly string[] = T.logo): void {
   c.save();
   c.translate(cx, top);
   c.lineJoin = 'round';
   c.lineCap = 'round';
   const rim = s * 0.09;
+  // 日本語のロゴは、決まった字を縦にそろえる
+  const jaArt = lines.join('\n') === ja.logo.join('\n');
+  const room = LOGO_W * s;
 
   // 1 行目: ホバギ（バが まん中）。左でホバギ本人がはずみ、ギの後ろからおばけがのぞく
+  const t1 = lines[0];
   const y1 = s * 0.8;
-  const w1 = wordWidth(c, 'ホバギ', s);
+  const s1 = jaArt ? s : fit(c, t1, s, room - s * 2.24);
+  const w1 = wordWidth(c, t1, s1);
   stickerArt(c, w1 / 2 + s * 0.14, y1 - s * 0.1, s, rim, (o) => {
     o.rotate(0.35);
     ghost(o, 0, -s * 0.12, s * 0.28, 0.5, -1, 1);
@@ -49,29 +57,35 @@ export function drawLogo(c: CanvasRenderingContext2D, cx: number, top: number, s
     o.rotate(-0.28);
     drawItem(o, 'hobagi', 0, 0, s * 0.55, STILL);
   });
-  word(c, 'ホバギ', -w1 / 2, y1, s, 'pumpkin', [-0.09, 0.06, -0.05]);
+  word(c, t1, -w1 / 2, y1, s1, 'pumpkin', tilts(t1, [-0.09, 0.06, -0.05]));
 
   // 2 行目: オア（両わきにコウモリ）
-  const s2 = s * 0.6;
+  const t2 = lines[1];
+  const s2 = jaArt ? s * 0.6 : fit(c, t2, s * 0.6, room - s * 1.76);
   const y2 = y1 + s * 0.85;
-  const w2 = wordWidth(c, 'オア', s2);
+  const w2 = wordWidth(c, t2, s2);
   for (const side of [-1, 1]) {
     stickerArt(c, side * (w2 / 2 + s * 0.48), y2 - s * 0.06, s * 0.8, rim * 0.8, (o) => {
       o.rotate(side * 0.2);
       bat(o, 0, 0, s * 0.15, 0.4);
     });
   }
-  word(c, 'オア', -w2 / 2, y2, s2, 'ghost', [0.07, -0.07]);
+  word(c, t2, -w2 / 2, y2, s2, 'ghost', tilts(t2, [0.07, -0.07]));
 
   // 3 行目: トリート！（リとーのあいだが まん中。！の点はキャンディ）
-  const s3 = s;
+  const bangAt = /[!！]$/.test(lines[2]);
+  const t3 = bangAt ? lines[2].slice(0, -1) : lines[2];
+  const s3 = jaArt ? s : fit(c, t3, s, room - s * 0.5, bangAt ? 0.46 : 0);
   const y3 = y2 + s * 0.95;
-  const g3 = glyphs(c, 'トリート', 0, 0, s3, []);
-  const x3 = -(g3[1].x + g3[1].w / 2);
-  const w3 = wordWidth(c, 'トリート', s3);
-  const bang = s3 * 0.46;
-  word(c, 'トリート', x3, y3, s3, 'candy', [-0.06, 0.05, 0, 0.06]);
-  exclaim(c, x3 + w3 + bang * 0.5, y3, s3, rim);
+  const w3 = wordWidth(c, t3, s3);
+  const bang = bangAt ? s3 * 0.46 : 0;
+  let x3 = -(w3 + bang) / 2;
+  if (jaArt) {
+    const g3 = glyphs(c, t3, 0, 0, s3, []);
+    x3 = -(g3[1].x + g3[1].w / 2);
+  }
+  word(c, t3, x3, y3, s3, 'candy', tilts(t3, [-0.06, 0.05, 0, 0.06]));
+  if (bangAt) exclaim(c, x3 + w3 + bang * 0.5, y3, s3, rim);
 
   // きらきら
   for (const [sx, sy, r] of [
@@ -83,6 +97,17 @@ export function drawLogo(c: CanvasRenderingContext2D, cx: number, top: number, s
     twinkle(c, sx, sy, s * r);
   }
   c.restore();
+}
+
+/** 1 字ずつの傾き（字が多い時は くり返す） */
+function tilts(text: string, base: number[]): number[] {
+  return [...text].map((_, i) => base[i % base.length]);
+}
+
+/** はば max に入る字の大きさ（入るなら size のまま）。extra = 字のあとに足すはば（字の大きさに対する割合。「！」の分） */
+function fit(c: CanvasRenderingContext2D, text: string, size: number, max: number, extra = 0): number {
+  const w = wordWidth(c, text, size) + size * extra;
+  return w > max ? (size * max) / w : size;
 }
 
 function wordWidth(c: CanvasRenderingContext2D, text: string, size: number): number {

@@ -29,9 +29,10 @@ export const C = {
   joanne: '#5fae8a',
 } as const;
 
-export const FONT = "'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', 'Hiragino Sans', system-ui, sans-serif";
+/** 韓国語の文字は M PLUS Rounded 1c にもヒラギノにも無いので、丸い Jua で描く（Jua はヒラギノのあと。半角カナなどの日本語は今までどおりヒラギノ） */
+export const FONT = "'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', 'Hiragino Sans', 'Jua', 'Apple SD Gothic Neo', system-ui, sans-serif";
 /** 数字・見出し用の丸い太字 */
-export const FONT_POP = "'Jua', 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', system-ui, sans-serif";
+export const FONT_POP = "'Jua', 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', 'Apple SD Gothic Neo', system-ui, sans-serif";
 
 export function font(size: number, weight = 800): string {
   return `${weight} ${size}px ${FONT}`;

@@ -55,7 +55,7 @@ describe('ルール', () => {
   });
 
   it('フィーバーに必要なモカロンは 2 こより減らない', () => {
-    const w = new World('yomi', 1, 0.8, { id: 't', name: 't', note: '', feverNeed: -9 });
+    const w = new World('yomi', 1, 0.8, { id: 't', feverNeed: -9 });
     expect(w.feverNeed).toBe(2);
   });
 

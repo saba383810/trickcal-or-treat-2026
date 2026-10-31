@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CHAR_ORDER } from '../src/config/characters';
 import { RESULT_LINE_IDS, lineKey, pickResultLine, pinchReaction, resultHint, resultText, talkLine } from '../src/config/lines';
 import type { Play } from '../src/config/missions';
-import { CHAR_TEXT } from '../src/config/text';
+import { ja } from '../src/i18n/ja';
 import type { Stats } from '../src/sim/world';
 
 function play(more: Partial<Play> = {}, st: Partial<Stats> = {}): Play {
@@ -22,9 +22,9 @@ function play(more: Partial<Play> = {}, st: Partial<Stats> = {}): Play {
   return { char: 'kommy', course: 'normal', score: 4000, stats, ...more };
 }
 
-/** そのキャラが話すセリフ ぜんぶ */
+/** そのキャラが話すセリフ ぜんぶ（日本語。T ははじめ ja） */
 function spoken(id: (typeof CHAR_ORDER)[number]): string[] {
-  const tx = CHAR_TEXT[id];
+  const tx = ja.chars[id];
   const talk = (['fever', 'spurt', 'chain', 'hit', 'skill'] as const).flatMap((k) => [0, 0.99].map((r) => talkLine(id, k, undefined, () => r) ?? ''));
   const pinch = [0, 0.99].map((r) => pinchReaction(id, () => r).text);
   return [tx.hello, ...RESULT_LINE_IDS.map((l) => resultText(id, l)), ...talk, ...pinch].filter(Boolean);

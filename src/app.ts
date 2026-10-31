@@ -3,13 +3,14 @@ import { Sound } from './audio/sound';
 import { rankOf, RANKS, type RankId } from './config/balance';
 import type { CharId } from './config/characters';
 import { pickResultLine } from './config/lines';
-import { activeMissions, fits, judgeMissions, playValue, type Mission, type Play } from './config/missions';
-import { dailySeed, dayKey, dayLabel, nightOpen, ruleOf, type CourseId } from './config/rules';
+import { activeMissions, fits, judgeMissions, missionText, playValue, type Mission, type Play } from './config/missions';
+import { dailySeed, dayKey, dayLabel, nightOpen, ruleOf, ruleText, type CourseId } from './config/rules';
+import { detectLang, isLang, setLang, T, type Lang } from './i18n';
 import { World } from './sim/world';
 import { Tutorial } from './tutorial';
 import { loadSave, writeSave, type CheekWho, type SaveData } from './storage';
 import { capture, cheekHooks, h } from './ui/dom';
-import { charSelect, howToPanel, linesPanel, missionsPanel, pausePanel, recordsPanel, resultPanel, settingsPanel, titleScreen, type MenuHost } from './ui/menus';
+import { charSelect, howToPanel, langButton, linesPanel, missionsPanel, pausePanel, recordsPanel, resultPanel, settingsPanel, titleScreen, type MenuHost } from './ui/menus';
 import { SceneCache, drawLiveDecor } from './view/draw/scene';
 import { outlined } from './view/draw/ui';
 import { GameView } from './view/gameView';
@@ -58,9 +59,10 @@ export class App implements MenuHost {
     this.sound.sfxVolume = this.save.sfxVolume;
     this.sound.bgmVolume = this.save.bgmVolume;
     this.sound.muted = this.save.muted;
+    setLang(isLang(this.save.lang) ? this.save.lang : detectLang());
     this.bindInput(canvas);
     cheekHooks.pulled = (who, k, sulk) => this.cheek(who, k, sulk);
-    void document.fonts?.load(popFont(40), '0123456789スタートフィーバー').catch(() => {});
+    this.loadFonts();
     this.goTitle();
     requestAnimationFrame((t) => {
       this.last = t;
@@ -70,6 +72,22 @@ export class App implements MenuHost {
 
   persist(): void {
     writeSave(this.save);
+  }
+
+  /** 数字・見出しの丸い字を先に読みこむ（韓国語は Jua の別の字なので、いまの言語の字で） */
+  private loadFonts(): void {
+    void document.fonts?.load(popFont(40), `0123456789${T.game.start}${T.game.fever}`).catch(() => {});
+  }
+
+  /** 言語を切り替えて、タイトルを出し直す。keep = 選んだ言語を保存する（開発用の ?lang= では保存しない） */
+  changeLang(l: Lang, keep = true): void {
+    setLang(l);
+    if (keep) {
+      this.save.lang = l;
+      this.persist();
+    }
+    this.loadFonts();
+    this.goTitle();
   }
 
   /** ほっぺを引っぱった記録（タイトル・キャラえらび・ゲーム中のスピキ など、どこでも） */
@@ -84,8 +102,9 @@ export class App implements MenuHost {
 
   // ================================================================= 画面遷移
 
-  private show(el: HTMLElement): void {
-    const layer = h('div', { class: 'layer' }, el);
+  /** corner は画面の右上に固定するボタン。拡大しながら出てくる el の外に置くので、出てくる途中に動かない */
+  private show(el: HTMLElement, corner?: HTMLElement): void {
+    const layer = h('div', { class: 'layer' }, corner ?? null, el);
     this.ui.replaceChildren(layer);
     el.querySelector<HTMLButtonElement>('.btn.primary')?.focus({ preventScroll: true });
   }
@@ -112,12 +131,19 @@ export class App implements MenuHost {
         missions: () => this.show(missionsPanel(this, { close: () => this.goTitle() })),
         settings: () => this.show(settingsPanel(this, { close: () => this.goTitle() })),
       }),
+      langButton(this, (l) => this.changeLang(l)),
     );
   }
 
   private goSelect(): void {
     this.toMenu();
-    this.show(charSelect(this, { pick: (id, course) => this.start(id, course), back: () => this.goTitle() }));
+    this.show(
+      charSelect(this, {
+        pick: (id, course) => this.start(id, course),
+        practice: (id, course) => this.startTutorial(id, course),
+        back: () => this.goTitle(),
+      }),
+    );
   }
 
   private showRecords(): void {
@@ -239,7 +265,7 @@ export class App implements MenuHost {
     for (const m of this.liveMissions) {
       if (this.toasted.has(m.id) || playValue(m, this.play(w)) < m.goal) continue;
       this.toasted.add(m.id);
-      this.view?.toast(m.text);
+      this.view?.toast(missionText(m));
     }
   }
 
@@ -289,7 +315,7 @@ export class App implements MenuHost {
   /**
    * 開発用: URL の ?dev=select|howto|settings|records|lines|missions|tutorial|pause|play|result で画面を飛ばす（スクリーンショットの確認用）。
    * play は &char= &course=daily|night &t=（その秒まで進める） &cry=（スピキの泣きレベル） &fever &bot（ボットが遊ぶ）
-   * tutorial は &step=catch|dodge|comfort|gifts|done（そのステップから）
+   * tutorial は &step=catch|dodge|comfort|gifts|done（そのステップから）。どの画面も &lang=ja|ko|en で言語を決められる（src/main.ts）
    */
   devJump(q: URLSearchParams, makeBot: (w: World) => { step(): void }): void {
     const dev = q.get('dev');
@@ -470,7 +496,7 @@ export class App implements MenuHost {
         if (this.timer <= 0) {
           this.mode = 'playing';
           view!.enable();
-          view!.banner('スタート!', C.gold, 1.0, 84);
+          view!.banner(T.game.start, C.gold, 1.0, 84);
           this.sound.countdown(true);
           this.bgm.mode = 'normal';
           this.startBgm();
@@ -529,9 +555,9 @@ export class App implements MenuHost {
     c.restore();
     // 今夜のおかし・まよなかは、ルールを出しておく
     if (this.course === 'normal') return;
-    const rule = ruleOf(this.course, this.day);
+    const rule = ruleText(ruleOf(this.course, this.day));
     const k = Math.min(1, f.w / 420);
-    const title = this.course === 'daily' ? `今夜のおかし ${dayLabel(this.day)}「${rule.name}」` : '「まよなか」モード';
+    const title = this.course === 'daily' ? T.game.dailyTitle(dayLabel(this.day), rule.name) : T.game.nightTitle;
     outlined(c, title, f.x + f.w / 2, f.y + f.h * 0.4 + 120 * k, { size: 30 * k, font: popFont(30 * k), fill: this.course === 'night' ? '#c9b6ff' : C.gold, width: 7 });
     outlined(c, rule.note, f.x + f.w / 2, f.y + f.h * 0.4 + 160 * k, { size: 18 * k, fill: C.white, width: 5 });
   }

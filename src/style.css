@@ -12,12 +12,18 @@
   --gold: #f6c453;
   --pink: #ff8fb3;
   --marker: #ffd9a8;
-  --font: 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', 'Hiragino Sans', system-ui, sans-serif;
-  --pop: 'Jua', 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', system-ui, sans-serif;
+  /* 韓国語の文字は M PLUS Rounded 1c にもヒラギノにも無いので、丸い Jua で出す（Jua はヒラギノのあと。半角カナなどの日本語は今までどおりヒラギノ） */
+  --font: 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', 'Hiragino Sans', 'Jua', 'Apple SD Gothic Neo', system-ui, sans-serif;
+  --pop: 'Jua', 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', 'Apple SD Gothic Neo', system-ui, sans-serif;
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* 韓国語は単語のとちゅうで折り返さない（日本語は今までどおり） */
+html:lang(ko) {
+  word-break: keep-all;
 }
 
 html,
@@ -277,6 +283,70 @@ canvas.pic {
   align-items: center;
   width: min(900px, 100%);
   text-align: center;
+}
+
+/* タイトル右上の言語ボタン（押すたびに次の言語） */
+.lang-btn {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--ink);
+  cursor: pointer;
+  background: var(--paper);
+  border: 3px solid var(--line-ink);
+  border-radius: 999px;
+  box-shadow: 0 3px 0 var(--line-ink);
+  transition:
+    transform 0.1s ease-out,
+    box-shadow 0.1s ease-out;
+}
+
+.lang-btn:hover {
+  background: #fff4e4;
+}
+
+.lang-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--line-ink);
+}
+
+.lang-btn:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 3px;
+}
+
+/* 地球の丸い線画 */
+.lang-icon {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid currentColor;
+  border-radius: 50%;
+  background: linear-gradient(currentColor, currentColor) center / 100% 2px no-repeat;
+}
+
+.lang-icon::before {
+  position: absolute;
+  inset: -2.5px 3px;
+  content: '';
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+
+/* せまい画面では、上のまん中の「非公式ファンゲーム」が言語ボタンにかからないよう、タイトルを少し下げる */
+@media (max-width: 600px) {
+  .lang-btn ~ .title {
+    padding-top: 46px;
+  }
 }
 
 .logo {
@@ -1421,6 +1491,18 @@ canvas.pic {
 
   .menu-buttons .row .btn {
     padding: 8px 14px;
+    font-size: 16px;
+  }
+
+  /* キャラえらびの もどる・れんしゅう・スタートを 1 行に */
+  .select > .row {
+    flex-wrap: nowrap;
+  }
+
+  .select > .row .btn {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 8px 10px;
     font-size: 16px;
   }
 

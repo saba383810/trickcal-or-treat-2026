@@ -2,15 +2,13 @@
 // 今夜のおかしは日替わり。同じ日はみんな同じルールで、お菓子の降り始めも同じになる。
 import type { RankId } from './balance';
 import type { CharId } from './characters';
+import { T, type Strings } from '../i18n';
 
 export type CourseId = 'normal' | 'daily' | 'night';
 
-/** ルールの変化（省略したものは、ふつうと同じ） */
+/** ルールの変化（省略したものは、ふつうと同じ）。名前と一行の説明は T.rules（id ごと） */
 export interface Rule {
   id: string;
-  name: string;
-  /** 一行の説明 */
-  note: string;
   /** 落ちる秒数の倍率（小さいほど速い） */
   fall?: number;
   /** パターンとパターンの間の秒数の倍率 */
@@ -31,20 +29,20 @@ export interface Rule {
   points?: number;
 }
 
-export const NORMAL: Rule = { id: 'normal', name: 'ふつう', note: 'いつもの ハロウィンの夜' };
+export const NORMAL: Rule = { id: 'normal' };
 
 /** まよなかモード。ふつうでランク A を取ると解放 */
-export const NIGHT: Rule = { id: 'night', name: 'まよなか', note: 'お菓子が速くて ホバギも多い。点は 1.2 倍', fall: 0.72, gap: 0.8, hobagi: 2.2, points: 1.2 };
+export const NIGHT: Rule = { id: 'night', fall: 0.72, gap: 0.8, hobagi: 2.2, points: 1.2 };
 
 /** 今夜のおかしのルール。日付で順番に回る */
 export const DAILY_RULES: Rule[] = [
-  { id: 'star', name: 'スターの夜', note: 'スターキャンディが いっぱい降る', star: 0.35 },
-  { id: 'moon', name: '満月の夜', note: 'フィーバーが 1.5 倍 長い', feverLen: 1.5 },
-  { id: 'mokaron', name: 'モカロンの夜', note: 'モカロンが 1 こ少なくても フィーバー', feverNeed: -1 },
-  { id: 'pumpkin', name: 'かぼちゃの夜', note: 'ホバギが多いけど、スピキのおかえしが 2 倍', hobagi: 1.6, gift: 2 },
-  { id: 'wind', name: 'はやての夜', note: 'お菓子が速く落ちるけど、点が 1.3 倍', fall: 0.85, points: 1.3 },
-  { id: 'chain', name: 'れんぞくの夜', note: 'れんぞくの倍率が 6 こごとに上がる', chainStep: 6 },
-  { id: 'calm', name: 'しずかな夜', note: 'ホバギが 少ない', hobagi: 0.4 },
+  { id: 'star', star: 0.35 },
+  { id: 'moon', feverLen: 1.5 },
+  { id: 'mokaron', feverNeed: -1 },
+  { id: 'pumpkin', hobagi: 1.6, gift: 2 },
+  { id: 'wind', fall: 0.85, points: 1.3 },
+  { id: 'chain', chainStep: 6 },
+  { id: 'calm', hobagi: 0.4 },
 ];
 
 /** その日の名前（端末の日付。0 時に切り替わる）。例: 2026-10-31 */
@@ -76,6 +74,11 @@ export function dailySeed(key: string): number {
 /** まよなかモードであそべる（ふつうで、だれかがランク A 以上） */
 export function nightOpen(rank: Partial<Record<CharId, RankId>>): boolean {
   return Object.values(rank).some((r) => r === 'A' || r === 'S' || r === 'SS');
+}
+
+/** ルールの名前と一行の説明（いまの言語） */
+export function ruleText(r: Rule): { name: string; note: string } {
+  return T.rules[r.id as keyof Strings['rules']] ?? { name: r.id, note: '' };
 }
 
 export function ruleOf(course: CourseId, key = dayKey()): Rule {
