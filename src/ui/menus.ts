@@ -386,7 +386,7 @@ export function resultPanel(host: MenuHost, info: ResultInfo, on: { retry: () =>
     h('li', {}, kind ? itemCanvas(kind, 30) : h('span', { class: 'dot' }), h('span', { class: 'k' }, label), h('b', {}, value));
 
   const share = () => {
-    const text = `『${GAME_TITLE}』で${tx.costume}${tx.name}が ${num(score)}点（ランク${rank}）！ #トリッカル #おかしキャッチ`;
+    const text = `『${GAME_TITLE}』で${tx.costume}${tx.name}が ${num(score)}点（ランク${rank}）！ #トリッカルオアトリート #トリッカル`;
     const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(SHARE_URL)}`;
     window.open(url, '_blank', 'noopener');
   };
