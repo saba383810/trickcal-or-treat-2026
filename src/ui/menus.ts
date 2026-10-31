@@ -72,7 +72,7 @@ export function titleScreen(
       'div',
       { class: 'logo' },
       h('span', { class: 'logo-sub' }, 'トリッカル 非公式ファンゲーム'),
-      h('h1', {}, h('span', { class: 'l1' }, 'おばけの国の'), h('span', { class: 'l2' }, 'おかしキャッチ')),
+      h('h1', {}, h('span', { class: 'l1' }, 'もちっと！ハロウィン'), h('span', { class: 'l2' }, 'おかしキャッチ')),
     ),
     h('div', { class: 'title-stage' }, row),
     h(

@@ -78,7 +78,7 @@ const L: Layout = {
   pauseBtn: { x: 0, y: 0, w: 0, h: 0 },
 };
 
-void Promise.all([document.fonts.load(popFont(80), 'おばけの国のおかしキャッチ'), document.fonts.load(font(20), 'トリッカル非公式ファンゲーム')]).then(draw);
+void Promise.all([document.fonts.load(popFont(80), 'もちっと！ハロウィンおかしキャッチ'), document.fonts.load(font(20), 'トリッカル非公式ファンゲーム')]).then(draw);
 
 function draw(): void {
   drawScene(c, L);
@@ -121,7 +121,7 @@ function draw(): void {
   c.fillText(pill, tx, py + 19 * k);
   c.translate(tx, 0);
   c.rotate(-0.04);
-  outlined(c, 'おばけの国の', 0, sub[0], { size: sub[1], font: popFont(sub[1]), fill: '#e6d6ff', stroke: C.ink, width: sub[1] * 0.27 });
+  outlined(c, 'もちっと！ハロウィン', 0, sub[0], { size: sub[1], font: popFont(sub[1]), fill: '#e6d6ff', stroke: C.ink, width: sub[1] * 0.27 });
   outlined(c, 'おかしキャッチ', 0, main[0], { size: main[1], font: popFont(main[1]), fill: '#ffc24d', stroke: C.ink, width: main[1] * 0.21 });
   c.restore();
   // ?kind=… を headless の --dump-dom で取り出せるよう、PNG を本文に書き出す
