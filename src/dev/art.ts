@@ -24,16 +24,16 @@ const ART = og
   ? {
       ground: H - 34,
       charR: 50,
-      charX: [204, 372, 540, 708, 876],
+      charX: [264, 432, 600, 768, 936],
       spiki: { x: W - 105, y: H * 0.5, r: 50 },
-      title: { x: W * 0.45, pill: 22, top: 62, s: 82 },
+      title: { x: W / 2, pill: 22, top: 62, s: 82 },
       items: [
         ['candy', 90, 120, 30],
         ['star', 250, 210, 34],
         ['shucaron', 960, 260, 36],
         ['mokaron', 1090, 110, 34],
         ['candy', 870, 70, 28],
-        ['star', 380, 60, 26],
+        ['star', 335, 150, 22],
         ['candy', 1135, 560, 24],
       ] as [Kind, number, number, number][],
       floor: [] as [Kind, number, number, number][],
@@ -41,9 +41,9 @@ const ART = og
   : {
       ground: 426,
       charR: 42,
-      charX: [78, 190, 302, 414, 526],
-      spiki: { x: 700, y: 236, r: 36 },
-      title: { x: 336, pill: 8, top: 42, s: 56 },
+      charX: [188, 294, 400, 506, 612],
+      spiki: { x: 730, y: 226, r: 34 },
+      title: { x: W / 2, pill: 8, top: 42, s: 56 },
       items: [
         ['candy', 36, 92, 20],
         ['star', 640, 40, 22],
