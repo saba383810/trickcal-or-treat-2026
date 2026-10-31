@@ -200,10 +200,7 @@ function nextTitle(total: number): (typeof TITLES)[number] | undefined {
 
 // ===================================================================== キャラえらび
 
-export function charSelect(
-  host: MenuHost,
-  on: { pick: (id: CharId, course: CourseId) => void; practice: (id: CharId, course: CourseId) => void; back: () => void },
-): HTMLElement {
+export function charSelect(host: MenuHost, on: { pick: (id: CharId, course: CourseId) => void; back: () => void }): HTMLElement {
   const s = host.sound;
   const save = host.save;
   let chosen: CharId = save.lastChar;
@@ -335,12 +332,11 @@ export function charSelect(
     chosen = id;
     showDetail();
   }
-  // れんしゅうは、えらんだキャラで チュートリアルから。終わったら、えらんだコースの本番へ
-  const go = (then: (id: CharId, course: CourseId) => void) => () => {
+  const start = () => {
     save.lastChar = chosen;
     save.lastCourse = course;
     host.persist();
-    then(chosen, course);
+    on.pick(chosen, course);
   };
   showDetail();
   showCourse();
@@ -352,13 +348,7 @@ export function charSelect(
     note,
     cards,
     details,
-    h(
-      'div',
-      { class: 'row' },
-      btn(T.common.back, on.back, s),
-      btn(T.select.practice, go(on.practice), s),
-      btn(T.select.start, go(on.pick), s, 'primary'),
-    ),
+    h('div', { class: 'row' }, btn(T.common.back, on.back, s), btn(T.select.start, start, s, 'primary')),
   );
 }
 

@@ -361,8 +361,6 @@ export const ja = {
     /** 今夜のおかしの説明の前の、ルールの名前 */
     ruleName: (name: string) => `${name}　`,
     start: 'スタート!',
-    /** このキャラで れんしゅう（チュートリアル）から始める */
-    practice: 'れんしゅう',
   },
 
   records: {

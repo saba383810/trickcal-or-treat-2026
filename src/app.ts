@@ -137,13 +137,7 @@ export class App implements MenuHost {
 
   private goSelect(): void {
     this.toMenu();
-    this.show(
-      charSelect(this, {
-        pick: (id, course) => this.start(id, course),
-        practice: (id, course) => this.startTutorial(id, course),
-        back: () => this.goTitle(),
-      }),
-    );
+    this.show(charSelect(this, { pick: (id, course) => this.start(id, course), back: () => this.goTitle() }));
   }
 
   private showRecords(): void {

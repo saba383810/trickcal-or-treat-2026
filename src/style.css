@@ -1494,18 +1494,6 @@ canvas.pic {
     font-size: 16px;
   }
 
-  /* キャラえらびの もどる・れんしゅう・スタートを 1 行に */
-  .select > .row {
-    flex-wrap: nowrap;
-  }
-
-  .select > .row .btn {
-    flex: 1 1 auto;
-    min-width: 0;
-    padding: 8px 10px;
-    font-size: 16px;
-  }
-
 
   .btn.big {
     min-width: 200px;

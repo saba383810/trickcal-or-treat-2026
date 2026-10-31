@@ -314,7 +314,6 @@ export const ko: Strings = {
     nightLock: '랭크 A 달성 시 해금',
     ruleName: (name: string) => `${name}: `,
     start: '시작!',
-    practice: '연습',
   },
 
   records: {

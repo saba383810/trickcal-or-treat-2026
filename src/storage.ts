@@ -97,7 +97,7 @@ export function loadSave(): SaveData {
     if (!['normal', 'daily', 'night'].includes(d.lastCourse)) d.lastCourse = 'normal';
     // 前の版の記録には言語がない（知らない言語も、まだ選んでいないことにする）
     if (!isLang(d.lang)) d.lang = null;
-    // 前の版の記録: もう遊んだことがあれば、れんしゅうは出さない（キャラえらび・あそびかたから できる）
+    // 前の版の記録: もう遊んだことがあれば、れんしゅうは出さない（あそびかたから できる）
     if (data.tutorialDone === undefined) d.tutorialDone = d.plays > 0;
     // 前の版の記録: ベストがあるキャラは 1 回は遊んでいる
     if (!data.charPlays) for (const id of CHAR_ORDER) if (d.best[id] !== undefined) d.charPlays[id] = 1;

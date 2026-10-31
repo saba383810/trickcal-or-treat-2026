@@ -318,8 +318,6 @@ export const en: Strings = {
     nightLock: 'Unlocks at rank A',
     ruleName: (name: string) => `${name}: `,
     start: 'Start!',
-    /** このキャラで れんしゅう（チュートリアル）から始める */
-    practice: 'Practice',
   },
 
   records: {
