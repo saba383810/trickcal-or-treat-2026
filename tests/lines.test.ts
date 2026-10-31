@@ -68,6 +68,10 @@ describe('原作の口調', () => {
     }
   });
 
+  it('コミーの「……」は 文の頭に置かない（「〜にゃ……」と消えるか、「うぅ……」のつぶやきの後）', () => {
+    for (const t of spoken('kommy')) expect(t, t).not.toMatch(/(^|[。？！] ?)……/);
+  });
+
   it('エルフィンは 名前で自分を呼ばない（一人称は 私）。「女王」と自分を呼ぶのは いばる時・言い訳の時だけ', () => {
     for (const t of spoken('elfin')) expect(t, t).not.toContain('エルフィン');
     expect(spoken('elfin').filter((t) => t.includes('女王')).length).toBeLessThanOrEqual(2);
