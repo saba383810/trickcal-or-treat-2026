@@ -2,7 +2,7 @@
 import { CHAR_SPECS, SPIKI } from '../view/draw/characters';
 import { FEET_R, CROUCH_FEET_R, drawChibi, type Expr } from '../view/draw/chibi';
 import { drawItem } from '../view/draw/items';
-import { drawScene, ghost } from '../view/draw/scene';
+import { cobweb, drawScene, garland, ghost } from '../view/draw/scene';
 import { bubble, outlined } from '../view/draw/ui';
 import type { Layout } from '../view/layout';
 import { C, font, popFont } from '../view/palette';
@@ -25,7 +25,7 @@ const ART = og
       charR: 50,
       charX: [204, 372, 540, 708, 876],
       spiki: { x: W - 105, y: H * 0.5, r: 50 },
-      title: { x: W * 0.45, pill: 26, sub: [104, 52], main: [184, 104] },
+      title: { x: W * 0.45, pill: 26, l1: [124, 84], l2: [222, 104] },
       items: [
         ['candy', 90, 120, 30],
         ['star', 250, 210, 34],
@@ -43,13 +43,12 @@ const ART = og
       charR: 46,
       charX: [78, 190, 302, 414, 526],
       spiki: { x: 700, y: 236, r: 36 },
-      title: { x: 336, pill: 12, sub: [66, 36], main: [124, 74] },
+      title: { x: 336, pill: 12, l1: [76, 52], l2: [134, 64] },
       items: [
         ['candy', 36, 92, 20],
         ['star', 640, 40, 22],
         ['mokaron', 752, 70, 24],
         ['shucaron', 612, 128, 22],
-        ['hobagi', 258, 200, 20],
       ] as [Kind, number, number, number][],
       floor: [
         ['candy', 90, 452, 24],
@@ -78,10 +77,21 @@ const L: Layout = {
   pauseBtn: { x: 0, y: 0, w: 0, h: 0 },
 };
 
-void Promise.all([document.fonts.load(popFont(80), 'もちっと！ハロウィンおかしキャッチ'), document.fonts.load(font(20), 'トリッカル非公式ファンゲーム')]).then(draw);
+void Promise.all([document.fonts.load(popFont(80), 'ホバギ・オア・トリート！'), document.fonts.load(font(20), 'トリッカル非公式ファンゲーム')]).then(draw);
+
+/** ロゴの文字（下にずらした影 → ふち → 色） */
+function logoText(text: string, x: number, y: number, size: number, fill: string): void {
+  const opts = { size, font: popFont(size), stroke: C.ink, width: size * 0.2 };
+  outlined(c, text, x, y + size * 0.08, { ...opts, fill: '#2a1a40', stroke: '#2a1a40' });
+  outlined(c, text, x, y, { ...opts, fill });
+}
 
 function draw(): void {
-  drawScene(c, L);
+  // 上のふちの飾りは、タイトルの後ろにかける
+  drawScene(c, L, false);
+  cobweb(c, 0, 0, 150 * k, 1);
+  cobweb(c, W, 0, 150 * k, -1);
+  garland(c, 50 * k, W - 50 * k, 6 * k, 26 * k, 22 * k);
   ghost(c, 150 * k, 300 * k, 22 * k, 0.4, 1, 0.6);
   ghost(c, 1000 * k, 150 * k, 18 * k, 1.2, -1, 0.6);
 
@@ -103,7 +113,7 @@ function draw(): void {
   });
 
   // タイトル
-  const { x: tx, pill: py, sub, main } = ART.title;
+  const { x: tx, pill: py } = ART.title;
   c.save();
   c.font = font(20 * k);
   const pill = 'トリッカル 非公式ファンゲーム';
@@ -120,9 +130,25 @@ function draw(): void {
   c.textBaseline = 'middle';
   c.fillText(pill, tx, py + 19 * k);
   c.translate(tx, 0);
-  c.rotate(-0.04);
-  outlined(c, 'もちっと！ハロウィン', 0, sub[0], { size: sub[1], font: popFont(sub[1]), fill: '#e6d6ff', stroke: C.ink, width: sub[1] * 0.27 });
-  outlined(c, 'おかしキャッチ', 0, main[0], { size: main[1], font: popFont(main[1]), fill: '#ffc24d', stroke: C.ink, width: main[1] * 0.21 });
+  c.rotate(-0.05);
+  // ホバギ（かぼちゃ色）・オア・（おばけ緑）／トリート！（むらさき）。タイトル画面のロゴと同じ
+  const [y1, s1] = ART.title.l1;
+  const [y2, s2] = ART.title.l2;
+  const so = s1 * 0.56;
+  c.font = popFont(s1);
+  const wh = c.measureText('ホバギ').width;
+  c.font = popFont(so);
+  const wo = c.measureText('・オア・').width;
+  let x = -(s1 + wh + wo) / 2;
+  c.save();
+  c.translate(x + s1 / 2, y1 + 6 * k);
+  c.rotate(-0.2);
+  drawItem(c, 'hobagi', 0, 0, s1 * 0.46, { t: 0, phase: 0, id: 0 });
+  c.restore();
+  x += s1;
+  logoText('ホバギ', x + wh / 2, y1, s1, '#ff9a3d');
+  logoText('・オア・', x + wh + wo / 2, y1 + s1 * 0.04, so, '#c6ef8c');
+  logoText('トリート！', 0, y2, s2, '#dcc4ff');
   c.restore();
   // ?kind=… を headless の --dump-dom で取り出せるよう、PNG を本文に書き出す
   const out = document.createElement('pre');

@@ -2,7 +2,7 @@
 import type { ItemKind, RankId, TitleId } from './balance';
 import type { CharId } from './characters';
 
-export const GAME_TITLE = 'もちっと！ハロウィンおかしキャッチ';
+export const GAME_TITLE = 'ホバギ・オア・トリート！';
 export const DISCLAIMER = '本作は『トリッカル・もちもちほっぺ大作戦』の非公式ファンゲームです。公式とは関係ありません。原作に関する権利は各権利者に帰属します。';
 export const SHARE_URL = 'https://sabanogames.com/entertainments/trickcal-or-treat-2026/';
 

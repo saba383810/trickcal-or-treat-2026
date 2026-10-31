@@ -130,7 +130,12 @@ export function titleScreen(
       'div',
       { class: 'logo' },
       h('span', { class: 'logo-sub' }, 'トリッカル 非公式ファンゲーム'),
-      h('h1', {}, h('span', { class: 'l1' }, 'もちっと！ハロウィン'), h('span', { class: 'l2' }, 'おかしキャッチ')),
+      h(
+        'h1',
+        { 'aria-label': GAME_TITLE },
+        h('span', { class: 'l1' }, itemCanvas('hobagi', 64), h('span', { class: 'w-hobagi' }, 'ホバギ'), h('span', { class: 'w-or' }, '・オア・')),
+        h('span', { class: 'l2' }, 'トリート！'),
+      ),
     ),
     h('div', { class: 'title-stage' }, row),
     h(
