@@ -1,7 +1,7 @@
 // ミッション（小さな目標）。リストの順に 3 つずつ出て、クリアすると次のミッションが出る。
 // クリアすると、ごほうびのおかしが「今までのおかし」（称号）に足される。
 import { RANKS, type RankId } from './balance';
-import type { CharId } from './characters';
+import { CHAR_ORDER, type CharId } from './characters';
 import type { CourseId } from './rules';
 import type { Stats } from '../sim/world';
 import type { SaveData } from '../storage';
@@ -71,6 +71,7 @@ export const MISSIONS: Mission[] = [
   live('star8', 'スターキャンディを 8こ キャッチ', 8, 30, (p) => p.stats.caught.star),
   live('dodge8', 'ホバギを 8こ よける', 8, 30, (p) => p.stats.cries),
   { id: 'chars2', text: '2人で あそぶ', goal: 2, reward: 30, total: (s) => count(s.charPlays, (n) => n > 0) },
+  { id: 'cheek10', text: 'ほっぺを 10かい のばす（タイトルでも）', goal: 10, reward: 20, total: (s) => s.cheek.pulls },
   live('shuca15', 'シューカロンを 15こ キャッチ', 15, 30, (p) => p.stats.caught.shucaron),
   live('gift6', 'スピキの おかえしを 6こ キャッチ', 6, 40, (p) => p.stats.gifts),
   { id: 'daily1', text: '「今夜のおかし」で あそぶ', goal: 1, reward: 40, play: () => 1, course: 'daily' },
@@ -82,15 +83,20 @@ export const MISSIONS: Mission[] = [
   live('elfinStar', 'エルフィンで スターキャンディを 15こ', 15, 50, (p) => p.stats.caught.star, { char: 'elfin' }),
   live('butterGuard', 'バターで ホバギを 3かい うけとめる', 3, 50, (p) => p.stats.hits, { char: 'butter' }),
   { id: 'chars5', text: '5人 ぜんいんで あそぶ', goal: 5, reward: 50, total: (s) => count(s.charPlays, (n) => n > 0) },
+  { id: 'cheekAll', text: '5人 ぜんいんの ほっぺを のばす', goal: 5, reward: 40, total: (s) => CHAR_ORDER.filter((c) => (s.cheek.by[c] ?? 0) > 0).length },
+  { id: 'lines10', text: 'セリフずかんを 10こ うめる', goal: 10, reward: 50, total: (s) => s.lines.length },
   live('kommyChain', 'コミーで れんぞく 50', 50, 50, (p) => p.stats.maxChain, { char: 'kommy' }),
   live('comfort5', '1かいで スピキを 5かい なぐさめる', 5, 50, (p) => p.stats.comforts),
   live('yomiFever', 'ヨミで フィーバー 3かい', 3, 50, (p) => p.stats.fevers, { char: 'yomi' }),
   { id: 'noHit', text: 'ホバギに 1かいも 当たらずに 3,000点', goal: 1, reward: 60, play: (p) => (p.stats.hits === 0 && p.score >= 3000 ? 1 : 0) },
   live('joanneDrain', 'ジョアンで ホバギを 3こ 吸う', 3, 60, (p) => p.stats.caught.hobagi, { char: 'joanne' }),
   live('comfortLv3', 'スピキが 3かい 泣いてから なぐさめる', 3, 60, (p) => p.stats.maxComfort),
+  { id: 'cheekSulk', text: 'ほっぺを しつこく のばす（つづけて 5かい）', goal: 1, reward: 30, total: (s) => s.cheek.sulks },
   live('chain80', 'れんぞく 80', 80, 60, (p) => p.stats.maxChain),
   live('feverScore', 'フィーバー中に 3,000点', 3000, 60, (p) => p.stats.feverScore),
   { id: 'daily3', text: '「今夜のおかし」を 3日 あそぶ', goal: 3, reward: 100, total: (s) => s.dailyDays },
+  { id: 'cheek100', text: 'ほっぺを 100かい のばす', goal: 100, reward: 60, total: (s) => s.cheek.pulls },
+  { id: 'lines30', text: 'セリフずかんを 30こ うめる', goal: 30, reward: 100, total: (s) => s.lines.length },
   rank('rankS', 'S', 80),
   { id: 'allA', text: '5人 ぜんいんで ランク A（ふつう）', goal: 5, reward: 100, total: (s) => count(s.rank, (r) => atLeast(r, 'A')) },
   live('sweets180', '1かいで おかしを 180こ キャッチ', 180, 80, (p) => sweets(p.stats)),

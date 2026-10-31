@@ -804,6 +804,94 @@ canvas.pic {
   text-align: center;
 }
 
+.line-new {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  vertical-align: 2px;
+  background: var(--pink, #ff7eb6);
+  border-radius: 999px;
+}
+
+/* ほっぺを引っぱりすぎた時の ひとこと */
+.mochi-talk {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  z-index: 3;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--ink);
+  white-space: nowrap;
+  pointer-events: none;
+  background: #fff;
+  border: 2px solid var(--line-ink);
+  border-radius: 12px;
+  transform: translateX(calc(-50% + var(--dx, 0px)));
+  animation: talk-in 0.2s ease-out;
+}
+
+@keyframes talk-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* セリフずかん */
+.lines-char {
+  margin-top: 8px;
+  text-align: left;
+  background: #fff;
+  border: 2px solid var(--c, #e2d4f0);
+  border-radius: 12px;
+}
+
+.lines-char summary {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.lines-char summary small {
+  margin-left: auto;
+  color: var(--ink-soft);
+}
+
+.lines-char ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px 8px;
+  list-style: none;
+}
+
+.lines-char li {
+  display: grid;
+  gap: 1px;
+  padding: 5px 10px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  background: #f6f1fa;
+  border-radius: 8px;
+}
+
+.lines-char li.got {
+  color: var(--ink);
+  background: #fff6dc;
+}
+
+.lines-char li small {
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
 .breakdown {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

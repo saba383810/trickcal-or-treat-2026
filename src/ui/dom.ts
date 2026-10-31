@@ -1,5 +1,7 @@
 import type { ItemKind } from '../config/balance';
+import { pinchReaction } from '../config/lines';
 import type { Sound } from '../audio/sound';
+import type { CheekWho } from '../storage';
 import { MochiBody } from '../mochi/body';
 import { drawChibi, feetR, type ChibiPose, type ChibiSpec, type Expr } from '../view/draw/chibi';
 import { drawItem } from '../view/draw/items';
@@ -146,11 +148,22 @@ export function chibiCanvas(spec: ChibiSpec, expr: Expr, size: number, opts: { b
  * ほっぺを引っぱれるキャラ。chibiCanvas と同じ大きさで並び、つまんでいる間と揺れている間だけ、
  * 絵を隠して上に重ねた大きめの canvas へ変形した絵を描く（伸びた分は枠の外へはみ出す）
  */
+/** ほっぺを引っぱって離した時に呼ぶ（記録する。app がつなぐ）。k = 伸ばした量 0〜1、sulk = しつこく引っぱって ひとこと言われた */
+export const cheekHooks: { pulled?: (who: CheekWho | undefined, k: number, sulk: boolean) => void } = {};
+
+/** これだけ伸ばしたら 1 回と数える */
+const PULL_MIN = 0.3;
+/** 短い間にこれだけ引っぱると、ひとこと言われる（たいていは すねる） */
+const SULK_PULLS = 5;
+const SULK_WINDOW = 6000;
+const SULK_MS = 2200;
+
+/** who = だれのほっぺか（数える・すねた時のセリフ） */
 export function mochiChibi(
   spec: ChibiSpec,
   expr: Expr,
   size: number,
-  opts: { body?: boolean; flip?: boolean; sound?: Sound } = {},
+  opts: { body?: boolean; flip?: boolean; sound?: Sound; who?: CheekWho } = {},
 ): HTMLElement {
   const body = opts.body !== false;
   const base = chibiCanvas(spec, expr, size, opts);
@@ -195,7 +208,7 @@ export function mochiChibi(
       c.translate(w, 0);
       c.scale(-1, 1);
     }
-    const pose: ChibiPose = { expr: mochi.pinch.held ? 'pinched' : expr, t: 0.4, body };
+    const pose: ChibiPose = { expr: mochi.pinch.held ? 'pinched' : sulking() ? sulkExpr : expr, t: 0.4, body };
     mochi.draw(c, spec, cx, top, size, pose);
   };
   let raf = 0;
@@ -213,7 +226,7 @@ export function mochiChibi(
     const dt = last ? Math.min(0.05, (t - last) / 1000) : 1 / 60;
     last = t;
     mochi.update(dt);
-    if (!mochi.active || !wrap.isConnected) {
+    if ((!mochi.active && !sulking()) || !wrap.isConnected) {
       mochi.reset();
       stop();
       return;
@@ -221,11 +234,40 @@ export function mochiChibi(
     draw();
     raf = requestAnimationFrame(tick);
   };
+  // 引っぱりすぎると、少しの間すねた顔になって ひとこと
+  let sulkUntil = 0;
+  let sulkExpr: Expr = 'sulk';
+  const sulking = () => performance.now() < sulkUntil;
+  const recent: number[] = [];
+  const talk = (text: string) => {
+    wrap.querySelector('.mochi-talk')?.remove();
+    const el = h('span', { class: 'mochi-talk' }, text);
+    wrap.append(el);
+    // 画面の端で はみ出さないように寄せる
+    const r = el.getBoundingClientRect();
+    const dx = Math.max(0, 6 - r.left) - Math.max(0, r.right - (document.documentElement.clientWidth - 6));
+    if (dx) el.style.setProperty('--dx', `${dx}px`);
+    setTimeout(() => el.remove(), SULK_MS);
+  };
   const end = (e: PointerEvent) => {
     const g = mochi.pinch.find(e.pointerId);
     if (!g) return;
-    opts.sound?.mochiRelease(mochi.pinch.intensity(g), mochi.pinch.params.releaseFreq);
+    const k = mochi.pinch.intensity(g);
+    opts.sound?.mochiRelease(k, mochi.pinch.params.releaseFreq);
     mochi.pinch.release(e.pointerId);
+    if (k < PULL_MIN) return;
+    const now = performance.now();
+    while (recent.length && now - recent[0] > SULK_WINDOW) recent.shift();
+    recent.push(now);
+    const sulk = !!opts.who && recent.length >= SULK_PULLS && !sulking();
+    if (sulk) {
+      recent.length = 0;
+      sulkUntil = now + SULK_MS;
+      const re = pinchReaction(opts.who!);
+      sulkExpr = re.expr;
+      talk(re.text);
+    }
+    cheekHooks.pulled?.(opts.who, k, sulk);
   };
   // ボタンの中のキャラ（モード選択）は、引っぱったあとに離してもボタンを押したことにしない
   let start: { x: number; y: number } | null = null;

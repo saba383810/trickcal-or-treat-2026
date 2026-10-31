@@ -2,13 +2,14 @@ import { Bgm } from './audio/bgm';
 import { Sound } from './audio/sound';
 import { rankOf, RANKS, type RankId } from './config/balance';
 import type { CharId } from './config/characters';
+import { pickResultLine } from './config/lines';
 import { activeMissions, fits, judgeMissions, playValue, type Mission, type Play } from './config/missions';
 import { dailySeed, dayKey, dayLabel, nightOpen, ruleOf, type CourseId } from './config/rules';
 import { World } from './sim/world';
 import { Tutorial } from './tutorial';
-import { loadSave, writeSave, type SaveData } from './storage';
-import { capture, h } from './ui/dom';
-import { charSelect, howToPanel, missionsPanel, pausePanel, recordsPanel, resultPanel, settingsPanel, titleScreen, type MenuHost } from './ui/menus';
+import { loadSave, writeSave, type CheekWho, type SaveData } from './storage';
+import { capture, cheekHooks, h } from './ui/dom';
+import { charSelect, howToPanel, linesPanel, missionsPanel, pausePanel, recordsPanel, resultPanel, settingsPanel, titleScreen, type MenuHost } from './ui/menus';
 import { SceneCache, drawLiveDecor } from './view/draw/scene';
 import { outlined } from './view/draw/ui';
 import { GameView } from './view/gameView';
@@ -58,6 +59,7 @@ export class App implements MenuHost {
     this.sound.bgmVolume = this.save.bgmVolume;
     this.sound.muted = this.save.muted;
     this.bindInput(canvas);
+    cheekHooks.pulled = (who, k, sulk) => this.cheek(who, k, sulk);
     void document.fonts?.load(popFont(40), '0123456789スタートフィーバー').catch(() => {});
     this.goTitle();
     requestAnimationFrame((t) => {
@@ -68,6 +70,16 @@ export class App implements MenuHost {
 
   persist(): void {
     writeSave(this.save);
+  }
+
+  /** ほっぺを引っぱった記録（タイトル・キャラえらび・ゲーム中のスピキ など、どこでも） */
+  private cheek(who: CheekWho | undefined, k: number, sulk: boolean): void {
+    const c = this.save.cheek;
+    c.pulls++;
+    if (k >= 0.9) c.big++;
+    if (sulk) c.sulks++;
+    if (who) c.by[who] = (c.by[who] ?? 0) + 1;
+    this.persist();
   }
 
   // ================================================================= 画面遷移
@@ -96,7 +108,7 @@ export class App implements MenuHost {
       titleScreen(this, {
         start: () => this.goSelect(),
         howTo: () => this.showHowTo(() => this.goTitle(), () => this.startTutorial(this.save.lastChar, 'normal')),
-        records: () => this.show(recordsPanel(this, { close: () => this.goTitle() })),
+        records: () => this.showRecords(),
         missions: () => this.show(missionsPanel(this, { close: () => this.goTitle() })),
         settings: () => this.show(settingsPanel(this, { close: () => this.goTitle() })),
       }),
@@ -106,6 +118,10 @@ export class App implements MenuHost {
   private goSelect(): void {
     this.toMenu();
     this.show(charSelect(this, { pick: (id, course) => this.start(id, course), back: () => this.goTitle() }));
+  }
+
+  private showRecords(): void {
+    this.show(recordsPanel(this, { close: () => this.goTitle(), lines: () => this.show(linesPanel(this, { close: () => this.showRecords() })) }));
   }
 
   private showHowTo(back: () => void, practice?: () => void): void {
@@ -125,6 +141,7 @@ export class App implements MenuHost {
     this.toasted.clear();
     const view = new GameView(world, id, this.screen, this.sound, this.bgm, this.scene);
     view.onPause = () => this.pause();
+    view.onCheek = (k) => this.cheek('spiki', k, false);
     view.hintComfort = this.save.comforts < 3;
     view.hintMove = this.save.plays < 3;
     view.fx.reduced = this.save.calm;
@@ -146,6 +163,7 @@ export class App implements MenuHost {
     const view = new GameView(world, id, this.screen, this.sound, this.bgm, this.scene);
     const tutorial = new Tutorial(world, () => view.touchUI);
     view.onPause = () => this.pause();
+    view.onCheek = (k) => this.cheek('spiki', k, false);
     view.hintComfort = false;
     view.hintMove = false;
     view.fx.reduced = this.save.calm;
@@ -246,8 +264,11 @@ export class App implements MenuHost {
     save.charPlays[id] = (save.charPlays[id] ?? 0) + 1;
     save.sweets += sweets;
     save.comforts += st.comforts;
+    const play = this.play(w);
+    const line = pickResultLine(save.lines, play, rank);
+    if (line.isNew) save.lines.push(line.key);
     const before = activeMissions(save).map((m) => m.id);
-    const cleared = judgeMissions(save, this.play(w));
+    const cleared = judgeMissions(save, play);
     this.persist();
     this.mode = 'result';
     this.bgm.mode = 'title';
@@ -255,7 +276,7 @@ export class App implements MenuHost {
     this.show(
       resultPanel(
         this,
-        { world: w, charId: id, course: this.course, day: this.day, prevBest, prevSweets, sweets, before, cleared, nightNew: !wasNight && nightOpen(save.rank) },
+        { world: w, charId: id, course: this.course, day: this.day, prevBest, prevSweets, sweets, before, cleared, nightNew: !wasNight && nightOpen(save.rank), line },
         {
           retry: () => this.start(id, this.course),
           select: () => this.goSelect(),
@@ -266,7 +287,7 @@ export class App implements MenuHost {
   }
 
   /**
-   * 開発用: URL の ?dev=select|howto|settings|records|missions|tutorial|pause|play|result で画面を飛ばす（スクリーンショットの確認用）。
+   * 開発用: URL の ?dev=select|howto|settings|records|lines|missions|tutorial|pause|play|result で画面を飛ばす（スクリーンショットの確認用）。
    * play は &char= &course=daily|night &t=（その秒まで進める） &cry=（スピキの泣きレベル） &fever &bot（ボットが遊ぶ）
    * tutorial は &step=catch|dodge|comfort|gifts|done（そのステップから）
    */
@@ -278,7 +299,8 @@ export class App implements MenuHost {
     if (dev === 'select') return this.goSelect();
     if (dev === 'howto') return this.showHowTo(() => this.goTitle());
     if (dev === 'settings') return this.show(settingsPanel(this, { close: () => this.goTitle() }));
-    if (dev === 'records') return this.show(recordsPanel(this, { close: () => this.goTitle() }));
+    if (dev === 'records') return this.showRecords();
+    if (dev === 'lines') return this.show(linesPanel(this, { close: () => this.showRecords() }));
     if (dev === 'missions') return this.show(missionsPanel(this, { close: () => this.goTitle() }));
     if (dev === 'tutorial') {
       this.startTutorial(id, this.course);

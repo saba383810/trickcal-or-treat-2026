@@ -5,6 +5,9 @@ import type { CourseId } from './config/rules';
 
 const KEY = 'trickcal-or-treat:v1';
 
+/** ほっぺを引っぱる相手（スピキとスピッキーはまとめて spiki） */
+export type CheekWho = CharId | 'spiki';
+
 export interface SaveData {
   /** キャラごとの最高スコア */
   best: Partial<Record<CharId, number>>;
@@ -30,6 +33,10 @@ export interface SaveData {
   missionBest: Record<string, number>;
   /** れんしゅう（チュートリアル）を終えた */
   tutorialDone: boolean;
+  /** ほっぺ: のばした回数・めいっぱいのばした回数・しつこく引っぱってひとこと言われた回数・相手ごとの回数 */
+  cheek: { pulls: number; big: number; sulks: number; by: Partial<Record<CheekWho, number>> };
+  /** 見つけたセリフ（キャラ.種類） */
+  lines: string[];
   lastChar: CharId;
   lastCourse: CourseId;
   sfxVolume: number;
@@ -53,6 +60,8 @@ function defaults(): SaveData {
     missions: [],
     missionBest: {},
     tutorialDone: false,
+    cheek: { pulls: 0, big: 0, sulks: 0, by: {} },
+    lines: [],
     lastChar: 'kommy',
     lastCourse: 'normal',
     sfxVolume: 0.8,
@@ -77,6 +86,8 @@ export function loadSave(): SaveData {
       daily: { day: data.daily?.day ?? '', best: { ...(data.daily?.best ?? {}) } },
       missions: [...(data.missions ?? [])],
       missionBest: { ...(data.missionBest ?? {}) },
+      cheek: { ...defaults().cheek, ...data.cheek, by: { ...(data.cheek?.by ?? {}) } },
+      lines: [...(data.lines ?? [])],
     };
     if (!CHAR_ORDER.includes(d.lastChar)) d.lastChar = 'kommy';
     if (!['normal', 'daily', 'night'].includes(d.lastCourse)) d.lastCourse = 'normal';

@@ -4,6 +4,7 @@ import type { Bgm } from '../audio/bgm';
 import type { Sound } from '../audio/sound';
 import { BALANCE, type ItemKind } from '../config/balance';
 import type { CharId } from '../config/characters';
+import { talkLine, type TalkId } from '../config/lines';
 import { MochiBody } from '../mochi/body';
 import type { GameEvent, Item, World } from '../sim/world';
 import { CHAR_SPECS, SPIKEY, SPIKI } from './draw/characters';
@@ -34,6 +35,9 @@ const KIND_COLOR: Record<ItemKind, string> = {
 
 /** ミッションクリアのお知らせを出しておく秒数 */
 const TOAST = 2.6;
+/** キャラのひとことを出しておく秒数と、次に話すまでの間 */
+const TALK = 1.8;
+const TALK_GAP = 7;
 const CRY_TEXT = ['', 'ｳｪｪﾝ…', 'ｳｱｱｰﾝ!!', 'ｳｱｱｱｱｱﾝ!!!'];
 
 interface Banner {
@@ -96,6 +100,11 @@ export class GameView {
   private spikiBody = new MochiBody();
   private spikiPress: SpikiPress | null = null;
   private spikiTalk: { text: string; t: number; max: number; color: string } | null = null;
+  /** 遊んでいるキャラのひとこと */
+  private talk: { text: string; t: number } | null = null;
+  private talkGap = 0;
+  /** スピキのほっぺを引っぱって離した時（記録する） */
+  onCheek: ((k: number) => void) | null = null;
   private spikiHop = 0;
   private tearT = 0;
 
@@ -237,6 +246,7 @@ export class GameView {
     const stretch = g ? pinch.intensity(g) : 0;
     pinch.release(id);
     if (stretch > 0.05) this.sound.mochiRelease(stretch, pinch.params.releaseFreq);
+    if (stretch >= 0.3) this.onCheek?.(stretch);
     this.comfort(stretch >= MOCHI_BONUS ? 1 : 0);
   }
 
@@ -348,6 +358,8 @@ export class GameView {
       this.spikiTalk.t += dt;
       if (this.spikiTalk.t > this.spikiTalk.max) this.spikiTalk = null;
     }
+    if (this.talk && (this.talk.t += dt) > TALK) this.talk = null;
+    this.talkGap -= dt;
     const cheer = w.fever > 0 || w.spiki.happy > 0;
     this.spikiHop = cheer && !w.crying ? Math.abs(Math.sin(this.t * (w.fever > 0 ? 7 : 9))) : 0;
     if (w.crying) {
@@ -389,9 +401,28 @@ export class GameView {
     this.fx.update(dt);
   }
 
+  /** できごとに合わせて、キャラがひとこと（フィーバー・ラストスパートは必ず、ほかは間をあけて） */
+  private react(e: GameEvent): void {
+    if (this.world.practice) return;
+    let kind: TalkId | null = null;
+    if (e.type === 'feverStart') kind = 'fever';
+    else if (e.type === 'lastSpurt') kind = 'spurt';
+    else if (this.talkGap > 0) return;
+    else if (e.type === 'catch' && (e.chain === 50 || e.chain === 100)) kind = 'chain';
+    else if (e.type === 'catch' && e.kind === 'star' && this.charId === 'elfin' && Math.random() < 0.3) kind = 'skill';
+    else if (e.type === 'hit' && Math.random() < 0.5) kind = e.guarded ? 'skill' : 'hit';
+    else if (e.type === 'drain' && Math.random() < 0.5) kind = 'skill';
+    if (!kind) return;
+    const text = talkLine(this.charId, kind, this.talk?.text);
+    if (!text) return;
+    this.talk = { text, t: 0 };
+    this.talkGap = TALK_GAP;
+  }
+
   private onEvent(e: GameEvent): void {
     const w = this.world;
     const L = this.L;
+    this.react(e);
     switch (e.type) {
       case 'catch': {
         const x = fx(L, e.x);
@@ -561,6 +592,7 @@ export class GameView {
     this.drawFlying(c);
     this.fx.draw(c);
     this.drawSpikiTalk(c);
+    this.drawTalk(c);
     c.restore();
     this.drawSpurtVignette(c);
     this.drawHud(c);
@@ -646,6 +678,26 @@ export class GameView {
     c.save();
     c.globalAlpha = Math.min(1, (tk.max - tk.t) * 4);
     bubble(c, tk.text, x, y, size, h.x - s.r * 0.2, tk.color);
+    c.restore();
+  }
+
+  private drawTalk(c: CanvasRenderingContext2D): void {
+    const tk = this.talk;
+    if (!tk) return;
+    const L = this.L;
+    const f = L.field;
+    const r = L.headR;
+    // 縦画面は全体が縮んで見えるので、大きめに出す
+    const size = L.portrait ? 26 : Math.max(17, r * 0.46);
+    c.save();
+    c.font = font(size);
+    const half = (c.measureText(tk.text).width + size * 1.1) / 2;
+    const px = fx(L, this.world.player.x);
+    const x = Math.max(f.x + half + 6, Math.min(f.x + f.w - half - 6, px));
+    const pop = Math.min(1, tk.t * 8);
+    const y = L.ground - FEET_R * r - r * 2.9 - size * 0.9 + (1 - pop) * 10;
+    c.globalAlpha = Math.min(1, (TALK - tk.t) * 4);
+    bubble(c, tk.text, x, y, size, Math.max(x - half + size, Math.min(x + half - size, px)));
     c.restore();
   }
 

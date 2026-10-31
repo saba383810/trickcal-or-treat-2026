@@ -2138,7 +2138,7 @@ function elfinWitchBody(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
 }
 
 // --- バター（ミイラ）: 頭に巻いた包帯と黄色いリボン、包帯でぐるぐるの体に大きな白いリボン。
-// 両手を上げて「がおー」。垂れ耳としっぽはそのまま
+// 両手を上げて ばんざい。垂れ耳としっぽはそのまま
 
 function bandageWrap(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
   const strip = (pts: number[], w: number) => {
@@ -2242,7 +2242,7 @@ function butterMummyBody(ctx: CanvasRenderingContext2D, s: ChibiSpec): void {
   bow(ctx, 20, 82, 0.2, 0.5, RIBBON_YELLOW);
   bow(ctx, -7, 104, 0, 0.32, RIBBON_YELLOW);
   bow(ctx, 0, 53, 0, 0.9, WHITE);
-  // がおー: ひじを曲げて両手を上げる
+  // ばんざい: ひじを曲げて両手を上げる
   for (const side of [-1, 1]) {
     tube(ctx, [side * 20, 48, side * 33, 70], 11, band);
     tube(ctx, [side * 33, 70, side * 33, 56], 11, band);

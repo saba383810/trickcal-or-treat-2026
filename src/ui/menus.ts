@@ -3,10 +3,11 @@ import type { Sound } from '../audio/sound';
 import { BALANCE, RANKS, TITLES, rankOf, titleOf, type ItemKind, type RankId } from '../config/balance';
 import { CHARACTERS, CHAR_ORDER, type CharId } from '../config/characters';
 import { MISSIONS, MISSION_SLOTS, activeMissions, fits, playValue, progressOf, type Mission, type Play } from '../config/missions';
+import { RESULT_LINE_IDS, lineKey, resultHint, resultText, type PickedLine } from '../config/lines';
 import { dailyRule, dayKey, dayLabel, nightOpen, ruleOf, type CourseId } from '../config/rules';
 import { CHAR_TEXT, DISCLAIMER, GAME_TITLE, ITEM_TEXT, RANK_TEXT, SHARE_URL, TITLE_TEXT } from '../config/text';
 import type { World } from '../sim/world';
-import type { SaveData } from '../storage';
+import type { CheekWho, SaveData } from '../storage';
 import { CHAR_SPECS, SPIKEY, SPIKI } from '../view/draw/characters';
 import type { ChibiSpec, Expr } from '../view/draw/chibi';
 import { C } from '../view/palette';
@@ -104,17 +105,17 @@ export function titleScreen(
 ): HTMLElement {
   const s = host.sound;
   // 全員で並ぶ。まん中はバターとコミー（向かい合って、少し大きく前に）
-  const cast: [ChibiSpec, Expr, number, boolean][] = [
-    [CHAR_SPECS.yomi, 'normal', 0.9, false],
-    [CHAR_SPECS.elfin, 'happy', 0.9, false],
-    [CHAR_SPECS.butter, 'happy', 1.15, false],
-    [CHAR_SPECS.kommy, 'smile', 1.15, true],
-    [CHAR_SPECS.joanne, 'smile', 0.9, true],
-    [SPIKI, 'worried', 0.8, true],
+  const cast: [ChibiSpec, Expr, number, boolean, CheekWho][] = [
+    [CHAR_SPECS.yomi, 'normal', 0.9, false, 'yomi'],
+    [CHAR_SPECS.elfin, 'happy', 0.9, false, 'elfin'],
+    [CHAR_SPECS.butter, 'happy', 1.15, false, 'butter'],
+    [CHAR_SPECS.kommy, 'smile', 1.15, true, 'kommy'],
+    [CHAR_SPECS.joanne, 'smile', 0.9, true, 'joanne'],
+    [SPIKI, 'worried', 0.8, true, 'spiki'],
   ];
   const row = h('div', { class: 'title-cast' });
-  for (const [spec, expr, k, flip] of cast) {
-    const m = mochiChibi(spec, expr, 34 * k, { sound: s, flip });
+  for (const [spec, expr, k, flip, who] of cast) {
+    const m = mochiChibi(spec, expr, 34 * k, { sound: s, flip, who });
     m.style.setProperty('--k', String(k));
     if (k > 1) m.classList.add('lead');
     row.append(m);
@@ -198,7 +199,7 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId, course: Cour
     return h(
       'div',
       { class: 'detail', style: `--c:${C[id]}` },
-      h('div', { class: 'detail-face' }, mochiChibi(CHAR_SPECS[id], 'happy', 30, { sound: s })),
+      h('div', { class: 'detail-face' }, mochiChibi(CHAR_SPECS[id], 'happy', 30, { sound: s, who: id })),
       h('div', { class: 'detail-name' }, h('small', {}, tx.costume), tx.name),
       h('p', { class: 'hello' }, `「${tx.hello}」`),
       h(
@@ -285,7 +286,7 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId, course: Cour
           showDetail();
         },
       },
-      mochiChibi(CHAR_SPECS[id], 'normal', 30, { sound: s }),
+      mochiChibi(CHAR_SPECS[id], 'normal', 30, { sound: s, who: id }),
       h('span', { class: 'card-name' }, h('small', {}, tx.costume), tx.name),
       badgeSlot,
     );
@@ -317,7 +318,9 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId, course: Cour
 
 // ===================================================================== きろく
 
-export function recordsPanel(host: MenuHost, on: { close: () => void }): HTMLElement {
+const whoName = (who: CheekWho) => (who === 'spiki' ? 'スピキ' : CHAR_TEXT[who].name);
+
+export function recordsPanel(host: MenuHost, on: { close: () => void; lines: () => void }): HTMLElement {
   const s = host.sound;
   const save = host.save;
   const total = save.sweets;
@@ -327,6 +330,8 @@ export function recordsPanel(host: MenuHost, on: { close: () => void }): HTMLEle
   const from = [...TITLES].find((x) => x.min <= total)?.min ?? 0;
   const ratio = next ? (total - from) / (next.min - from) : 1;
   const today = dayKey();
+  const cheek = save.cheek;
+  const topCheek = (Object.entries(cheek.by) as [CheekWho, number][]).sort((a, b) => b[1] - a[1])[0];
   const dailyBest =
     save.daily.day === today
       ? CHAR_ORDER.map((id) => [id, save.daily.best[id] ?? -1] as const)
@@ -342,7 +347,7 @@ export function recordsPanel(host: MenuHost, on: { close: () => void }): HTMLEle
         h(
           'div',
           { class: 'rec-char', style: `--c:${C[id]}` },
-          mochiChibi(CHAR_SPECS[id], best[id] ? 'smile' : 'normal', 18, { sound: s, body: false }),
+          mochiChibi(CHAR_SPECS[id], best[id] ? 'smile' : 'normal', 18, { sound: s, body: false, who: id }),
           h('span', { class: 'card-name' }, CHAR_TEXT[id].name),
           h('b', {}, best[id] ? num(best[id]) : '−'),
           rankBadge(rank[id], 'small'),
@@ -382,7 +387,44 @@ export function recordsPanel(host: MenuHost, on: { close: () => void }): HTMLEle
     nightOpen(save.rank) ? charGrid(save.night.best, save.night.rank) : null,
     h('h3', { class: 'rec-sub' }, `今夜のおかし（${dayLabel(today)}・${dailyRule(today).name}）`),
     h('p', { class: 'rec-daily' }, h('small', {}, `きょうのベスト `), h('b', {}, dailyBest ? `${num(dailyBest[1])}（${CHAR_TEXT[dailyBest[0]].name}）` : '−'), h('small', {}, `　あそんだ日 ${save.dailyDays} 日`)),
-    h('div', { class: 'row' }, btn('とじる', on.close, s, 'primary')),
+    h('h3', { class: 'rec-sub' }, 'ほっぺ'),
+    h('p', { class: 'rec-daily' }, h('small', {}, 'のばした '), h('b', {}, `${num(cheek.pulls)} 回`), h('small', {}, `　めいっぱい ${num(cheek.big)} 回・しつこく ${num(cheek.sulks)} 回`)),
+    h('p', { class: 'rec-note' }, topCheek ? `いちばん のばしたのは ${whoName(topCheek[0])}（${num(topCheek[1])} 回）` : 'キャラの ほっぺは、タイトルでも キャラえらびでも 引っぱれます'),
+    h('div', { class: 'row' }, btn(`セリフずかん ${foundLines(save)}/${LINE_TOTAL}`, on.lines, s), btn('とじる', on.close, s, 'primary')),
+  );
+}
+
+// ===================================================================== セリフずかん
+
+const LINE_TOTAL = CHAR_ORDER.length * RESULT_LINE_IDS.length;
+const foundLines = (save: SaveData) => CHAR_ORDER.reduce((n, id) => n + RESULT_LINE_IDS.filter((l) => save.lines.includes(lineKey(id, l))).length, 0);
+
+export function linesPanel(host: MenuHost, on: { close: () => void }): HTMLElement {
+  const s = host.sound;
+  const found = new Set(host.save.lines);
+  return h(
+    'div',
+    { class: 'panel lines-panel' },
+    h('h2', {}, 'セリフずかん'),
+    h('p', { class: 'rec-note' }, `見つけた セリフ ${foundLines(host.save)} / ${LINE_TOTAL}。あそび終わった時の ようすで、ひとことが かわります`),
+    ...CHAR_ORDER.map((id) => {
+      const got = RESULT_LINE_IDS.filter((l) => found.has(lineKey(id, l))).length;
+      return h(
+        'details',
+        { class: 'lines-char', style: `--c:${C[id]}` },
+        h('summary', {}, h('b', {}, CHAR_TEXT[id].name), h('small', {}, `${got} / ${RESULT_LINE_IDS.length}`)),
+        h(
+          'ul',
+          {},
+          ...RESULT_LINE_IDS.map((l) =>
+            found.has(lineKey(id, l))
+              ? h('li', { class: 'got' }, h('span', {}, `「${resultText(id, l)}」`), h('small', {}, resultHint(id, l)))
+              : h('li', {}, h('span', {}, '？？？'), h('small', {}, resultHint(id, l))),
+          ),
+        ),
+      );
+    }),
+    h('div', { class: 'row' }, btn('もどる', on.close, s, 'primary')),
   );
 }
 
@@ -446,7 +488,7 @@ export function howToPanel(host: MenuHost, on: { close: () => void; practice?: (
     h(
       'div',
       { class: 'spiki-tip' },
-      h('div', { class: 'tip-face' }, mochiChibi(SPIKEY, 'smile', 24, { sound: s }), h('span', { class: 'arrow' }, '→'), mochiChibi(SPIKI, 'worried', 24, { sound: s })),
+      h('div', { class: 'tip-face' }, mochiChibi(SPIKEY, 'smile', 24, { sound: s, who: 'spiki' }), h('span', { class: 'arrow' }, '→'), mochiChibi(SPIKI, 'worried', 24, { sound: s, who: 'spiki' })),
       h(
         'p',
         {},
@@ -552,6 +594,8 @@ export interface ResultInfo {
   cleared: Mission[];
   /** まよなかモードがあそべるようになった */
   nightNew: boolean;
+  /** キャラのひとこと（はじめて見たものは NEW） */
+  line: PickedLine;
 }
 
 export function resultPanel(host: MenuHost, info: ResultInfo, on: { retry: () => void; select: () => void; title: () => void }): HTMLElement {
@@ -562,7 +606,6 @@ export function resultPanel(host: MenuHost, info: ResultInfo, on: { retry: () =>
   const rank = rankOf(score);
   const tx = CHAR_TEXT[id];
   const good = rank === 'SS' || rank === 'S' || rank === 'A';
-  const line = good ? tx.good : rank === 'C' ? tx.bad : tx.ok;
   const expr: Expr = good ? 'happy' : rank === 'C' ? 'worried' : 'smile';
   const isBest = score > info.prevBest && score > 0;
   const st = w.stats;
@@ -619,7 +662,7 @@ export function resultPanel(host: MenuHost, info: ResultInfo, on: { retry: () =>
     h(
       'div',
       { class: 'result-top' },
-      h('div', { class: 'result-face' }, mochiChibi(CHAR_SPECS[id], expr, 40, { sound: s })),
+      h('div', { class: 'result-face' }, mochiChibi(CHAR_SPECS[id], expr, 40, { sound: s, who: id })),
       h(
         'div',
         { class: 'score-box' },
@@ -630,7 +673,7 @@ export function resultPanel(host: MenuHost, info: ResultInfo, on: { retry: () =>
         isBest ? h('div', { class: 'new' }, 'ベスト更新!') : h('div', { class: 'prev' }, `${bestLabel} ${num(info.prevBest)}`),
       ),
     ),
-    h('p', { class: 'line' }, `「${line}」`),
+    h('p', { class: 'line' }, `「${info.line.text}」`, info.line.isNew ? h('small', { class: 'line-new' }, 'NEW セリフ') : null),
     h(
       'ul',
       { class: 'breakdown' },
