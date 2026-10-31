@@ -634,12 +634,11 @@ export function ghost(c: CanvasRenderingContext2D, x: number, y: number, s: numb
   c.restore();
 }
 
-/** コウモリ。color を渡すと、その色のかげ絵（目なし）になる */
-export function bat(c: CanvasRenderingContext2D, x: number, y: number, s: number, ph: number, color?: string): void {
+export function bat(c: CanvasRenderingContext2D, x: number, y: number, s: number, ph: number): void {
   const flap = Math.sin(ph) * 0.6;
   c.save();
   c.translate(x, y);
-  c.fillStyle = color ?? '#1b1230';
+  c.fillStyle = '#1b1230';
   for (const side of [-1, 1]) {
     c.save();
     c.scale(side, 1);
@@ -665,10 +664,6 @@ export function bat(c: CanvasRenderingContext2D, x: number, y: number, s: number
   c.lineTo(s * 0.25, -s * 0.75);
   c.lineTo(s * 0.05, -s * 0.4);
   c.fill();
-  if (color) {
-    c.restore();
-    return;
-  }
   c.fillStyle = '#ffd77a';
   c.beginPath();
   c.arc(-s * 0.15, -s * 0.05, s * 0.08, 0, Math.PI * 2);

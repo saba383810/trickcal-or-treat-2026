@@ -1,12 +1,13 @@
 // タイトルのロゴ「ホバギ / オア / トリート！」。タイトル画面とサムネイル（src/dev/art.ts）で同じものを描く。
 // 文字は 1 字ずつ少し傾けて、かぼちゃ（すじ）・おばけ（うす緑）・キャンディ（しま）の柄とつやを入れる。
+// 3 行は「バ」「オア」「リーのあいだ」がまっすぐ縦にそろう。絵（ホバギ・おばけ・コウモリ・キャンディ）はそのまわりに置くだけで、そろえには入れない。
 import { C, font } from '../palette';
 import { drawItem } from './items';
-import { bat } from './scene';
+import { bat, ghost } from './scene';
 
-/** ロゴの幅と高さ（「ホバギ」の文字の大きさ = 1） */
-export const LOGO_W = 4.9;
-export const LOGO_H = 3.3;
+/** ロゴの幅と高さ（「ホバギ」の文字の大きさ = 1）。(cx) が 3 行のそろう線 */
+export const LOGO_W = 5.0;
+export const LOGO_H = 3.4;
 
 type Paint = 'pumpkin' | 'ghost' | 'candy';
 
@@ -18,6 +19,8 @@ const BASE: Record<Paint, string[]> = {
   ghost: ['#f6ffe6', '#c3ee8a', '#86c94a'],
   candy: ['#f6ecff', '#cba6ff', '#9466e0'],
 };
+
+const STILL = { t: 0, phase: 0, id: 0 };
 
 interface Glyph {
   ch: string;
@@ -33,42 +36,49 @@ export function drawLogo(c: CanvasRenderingContext2D, cx: number, top: number, s
   c.translate(cx, top);
   c.lineJoin = 'round';
   c.lineCap = 'round';
+  const rim = s * 0.09;
 
-  // 1 行目: ホバギ（左にホバギ本人）
-  const y1 = s * 0.72;
-  const icon = s * 1.05;
+  // 1 行目: ホバギ（バが まん中）。左でホバギ本人がはずみ、ギの後ろからおばけがのぞく
+  const y1 = s * 0.8;
   const w1 = wordWidth(c, 'ホバギ', s);
-  let x = -(icon + w1) / 2;
-  sticker(c, x + icon * 0.42, y1 + s * 0.06, s * 0.5);
-  c.save();
-  c.translate(x + icon * 0.42, y1 + s * 0.06);
-  c.rotate(-0.22);
-  drawItem(c, 'hobagi', 0, 0, s * 0.44, { t: 0, phase: 0, id: 0 });
-  c.restore();
-  word(c, 'ホバギ', x + icon, y1, s, 'pumpkin', [-0.09, 0.06, -0.05]);
+  stickerArt(c, w1 / 2 + s * 0.14, y1 - s * 0.1, s, rim, (o) => {
+    o.rotate(0.35);
+    ghost(o, 0, -s * 0.12, s * 0.28, 0.5, -1, 1);
+  });
+  stickerArt(c, -w1 / 2 - s * 0.4, y1 - s * 0.1, s * 1.4, rim, (o) => {
+    o.rotate(-0.28);
+    drawItem(o, 'hobagi', 0, 0, s * 0.55, STILL);
+  });
+  word(c, 'ホバギ', -w1 / 2, y1, s, 'pumpkin', [-0.09, 0.06, -0.05]);
 
   // 2 行目: オア（両わきにコウモリ）
   const s2 = s * 0.6;
   const y2 = y1 + s * 0.85;
   const w2 = wordWidth(c, 'オア', s2);
-  for (const side of [-1, 1]) logoBat(c, side * (w2 / 2 + s * 0.5), y2 - s * 0.04, s * 0.15, side);
+  for (const side of [-1, 1]) {
+    stickerArt(c, side * (w2 / 2 + s * 0.48), y2 - s * 0.06, s * 0.8, rim * 0.8, (o) => {
+      o.rotate(side * 0.2);
+      bat(o, 0, 0, s * 0.15, 0.4);
+    });
+  }
   word(c, 'オア', -w2 / 2, y2, s2, 'ghost', [0.07, -0.07]);
 
-  // 3 行目: トリート！（！の点はキャンディ）
+  // 3 行目: トリート！（リとーのあいだが まん中。！の点はキャンディ）
   const s3 = s;
   const y3 = y2 + s * 0.95;
+  const g3 = glyphs(c, 'トリート', 0, 0, s3, []);
+  const x3 = -(g3[1].x + g3[1].w / 2);
   const w3 = wordWidth(c, 'トリート', s3);
   const bang = s3 * 0.46;
-  x = -(w3 + bang) / 2;
-  word(c, 'トリート', x, y3, s3, 'candy', [-0.06, 0.05, 0, 0.06]);
-  exclaim(c, x + w3 + bang * 0.5, y3, s3);
+  word(c, 'トリート', x3, y3, s3, 'candy', [-0.06, 0.05, 0, 0.06]);
+  exclaim(c, x3 + w3 + bang * 0.5, y3, s3, rim);
 
   // きらきら
   for (const [sx, sy, r] of [
-    [w1 / 2 + icon / 2 + s * 0.12, y1 - s * 0.42, 0.16],
-    [-(w3 + bang) / 2 - s * 0.1, y3 - s * 0.55, 0.13],
-    [(w3 + bang) / 2 + s * 0.05, y3 + s * 0.48, 0.1],
-    [-w1 / 2 + s * 0.2, y1 + s * 0.6, 0.08],
+    [-w1 / 2 - s * 1.0, y1 - s * 0.58, 0.12],
+    [w1 / 2 + s * 0.62, y1 + s * 0.28, 0.14],
+    [x3 - s * 0.12, y3 - s * 0.58, 0.12],
+    [x3 + w3 + bang + s * 0.08, y3 + s * 0.46, 0.09],
   ]) {
     twinkle(c, sx, sy, s * r);
   }
@@ -173,7 +183,7 @@ function fills(c: CanvasRenderingContext2D, paint: Paint, size: number, w: numbe
 }
 
 /** 「！」の棒（文字と同じ描き方）と、点のかわりのキャンディ */
-function exclaim(c: CanvasRenderingContext2D, x: number, y: number, size: number): void {
+function exclaim(c: CanvasRenderingContext2D, x: number, y: number, size: number, rim: number): void {
   const bar = new Path2D();
   const top = -size * 0.44;
   const bot = size * 0.12;
@@ -203,39 +213,49 @@ function exclaim(c: CanvasRenderingContext2D, x: number, y: number, size: number
   }
   c.restore();
   // 点: キャンディ
-  const cy = y + size * 0.42;
-  sticker(c, x, cy, size * 0.2);
-  c.save();
-  c.translate(x, cy);
-  c.rotate(-0.35);
-  drawItem(c, 'candy', 0, 0, size * 0.17, { t: 0, phase: 0, id: 0 });
-  c.restore();
+  stickerArt(c, x, y + size * 0.42, size * 0.6, rim, (o) => {
+    o.rotate(-0.35);
+    drawItem(o, 'candy', 0, 0, size * 0.17, STILL);
+  });
 }
 
-/** 絵の後ろの、影とクリーム色のまる（文字のふちと合わせる） */
-function sticker(c: CanvasRenderingContext2D, x: number, y: number, r: number): void {
-  c.fillStyle = SHADOW;
-  c.beginPath();
-  c.arc(x, y + r * 0.18, r, 0, Math.PI * 2);
-  c.fill();
-  c.fillStyle = RIM;
-  c.beginPath();
-  c.arc(x, y, r, 0, Math.PI * 2);
-  c.fill();
-}
-
-/** ふちどりしたコウモリ（side = -1 は左向き） */
-function logoBat(c: CanvasRenderingContext2D, x: number, y: number, s: number, side: number): void {
-  c.save();
-  c.translate(x, y);
-  c.rotate(side * 0.18);
-  const d = s * 0.22;
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2;
-    bat(c, Math.cos(a) * d, Math.sin(a) * d, s, 0.4, RIM);
-  }
-  bat(c, 0, 0, s, 0.4);
-  c.restore();
+/**
+ * 絵に、文字と同じクリーム色のふちと影をつけて描く。絵を box × box の別の canvas に描いて、
+ * その形を色でぬったものを まわりにずらして重ね、ふちにする（絵の形どおりに縁取れる）
+ */
+function stickerArt(c: CanvasRenderingContext2D, x: number, y: number, box: number, rim: number, paint: (o: CanvasRenderingContext2D) => void): void {
+  const m = c.getTransform();
+  const k = Math.max(1, Math.hypot(m.a, m.b));
+  const px = Math.ceil(box * k);
+  const art = document.createElement('canvas');
+  art.width = px;
+  art.height = px;
+  const o = art.getContext('2d')!;
+  o.setTransform(k, 0, 0, k, px / 2, px / 2);
+  o.lineJoin = 'round';
+  o.lineCap = 'round';
+  paint(o);
+  const tint = (color: string) => {
+    const t = document.createElement('canvas');
+    t.width = px;
+    t.height = px;
+    const tc = t.getContext('2d')!;
+    tc.drawImage(art, 0, 0);
+    tc.globalCompositeOperation = 'source-in';
+    tc.fillStyle = color;
+    tc.fillRect(0, 0, px, px);
+    return t;
+  };
+  const put = (img: HTMLCanvasElement, dx: number, dy: number) => c.drawImage(img, x - box / 2 + dx, y - box / 2 + dy, box, box);
+  const ring = (img: HTMLCanvasElement, dy: number) => {
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      put(img, Math.cos(a) * rim, Math.sin(a) * rim + dy);
+    }
+  };
+  ring(tint(SHADOW), rim * 1.1);
+  ring(tint(RIM), 0);
+  put(art, 0, 0);
 }
 
 function twinkle(c: CanvasRenderingContext2D, x: number, y: number, s: number): void {
