@@ -285,18 +285,15 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId, course: Cour
         class: 'card',
         type: 'button',
         style: `--c:${C[id]}`,
+        // えらんだカードをもう一度押しても始めない（ほっぺを引っぱった後に始まってしまうので）。始めるのはスタートのボタンだけ
         onclick: () => {
-          if (chosen === id) {
-            s.click();
-            start();
-            return;
-          }
-          chosen = id;
+          if (chosen === id) return;
           s.click();
-          showDetail();
+          choose(id);
         },
       },
-      mochiChibi(CHAR_SPECS[id], 'normal', 30, { sound: s, who: id }),
+      // ほっぺをつまんでも、そのキャラをえらぶ
+      mochiChibi(CHAR_SPECS[id], 'normal', 30, { sound: s, who: id, onGrab: () => choose(id) }),
       h('span', { class: 'card-name' }, h('small', {}, tx.costume), tx.name),
       badgeSlot,
     );
@@ -305,6 +302,11 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId, course: Cour
     const detail = detailOf(id);
     detailEls.set(id, detail);
     details.append(detail);
+  }
+  function choose(id: CharId): void {
+    if (chosen === id) return;
+    chosen = id;
+    showDetail();
   }
   const start = () => {
     save.lastChar = chosen;

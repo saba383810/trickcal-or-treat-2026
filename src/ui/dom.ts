@@ -163,7 +163,7 @@ export function mochiChibi(
   spec: ChibiSpec,
   expr: Expr,
   size: number,
-  opts: { body?: boolean; flip?: boolean; sound?: Sound; who?: CheekWho } = {},
+  opts: { body?: boolean; flip?: boolean; sound?: Sound; who?: CheekWho; onGrab?: () => void } = {},
 ): HTMLElement {
   const body = opts.body !== false;
   const base = chibiCanvas(spec, expr, size, opts);
@@ -282,6 +282,7 @@ export function mochiChibi(
     start = { x: e.clientX, y: e.clientY };
     pulled = false;
     opts.sound?.mochiGrab();
+    opts.onGrab?.();
     over.style.display = '';
     draw();
     base.style.visibility = 'hidden';
