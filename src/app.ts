@@ -1,7 +1,9 @@
 import { Bgm } from './audio/bgm';
 import { Sound } from './audio/sound';
-import { rankOf, RANKS } from './config/balance';
+import { rankOf, RANKS, type RankId } from './config/balance';
 import type { CharId } from './config/characters';
+import { activeMissions, fits, judgeMissions, playValue, type Mission, type Play } from './config/missions';
+import { dailySeed, dayKey, dayLabel, nightOpen, ruleOf, type CourseId } from './config/rules';
 import { World } from './sim/world';
 import { loadSave, writeSave, type SaveData } from './storage';
 import { capture, h } from './ui/dom';
@@ -30,6 +32,12 @@ export class App implements MenuHost {
   private mode: Mode = 'menu';
   private pausedFrom: Mode = 'playing';
   private charId: CharId = this.save.lastChar;
+  private course: CourseId = this.save.lastCourse;
+  /** 遊び始めた日（今夜のおかしは、遊んでいる途中で日付が変わってもその日の分） */
+  private day = dayKey();
+  /** 途中でたっせいが分かるおねがいと、もうお知らせしたもの */
+  private liveMissions: Mission[] = [];
+  private toasted = new Set<string>();
   private world: World | null = null;
   private view: GameView | null = null;
   private scene = new SceneCache();
@@ -93,17 +101,22 @@ export class App implements MenuHost {
 
   private goSelect(): void {
     this.toMenu();
-    this.show(charSelect(this, { pick: (id) => this.start(id), back: () => this.goTitle() }));
+    this.show(charSelect(this, { pick: (id, course) => this.start(id, course), back: () => this.goTitle() }));
   }
 
   private showHowTo(back: () => void): void {
     this.show(howToPanel(this, { close: back }));
   }
 
-  private start(id: CharId): void {
+  private start(id: CharId, course: CourseId = this.course): void {
     this.clearUi();
     this.charId = id;
-    const world = new World(id, (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0);
+    this.course = course;
+    this.day = dayKey();
+    const seed = course === 'daily' ? dailySeed(this.day) : (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0;
+    const world = new World(id, seed, undefined, ruleOf(course, this.day));
+    this.liveMissions = activeMissions(this.save).filter((m) => m.live && fits(m, id, course));
+    this.toasted.clear();
     const view = new GameView(world, id, this.screen, this.sound, this.bgm, this.scene);
     view.onPause = () => this.pause();
     view.hintComfort = this.save.comforts < 3;
@@ -129,9 +142,9 @@ export class App implements MenuHost {
 
   private showPause(): void {
     this.show(
-      pausePanel(this, {
+      pausePanel(this, this.play(this.world!), {
         resume: () => this.resume(),
-        retry: () => this.start(this.charId),
+        retry: () => this.start(this.charId, this.course),
         select: () => this.goSelect(),
         howTo: () => this.showHowTo(() => this.showPause()),
       }),
@@ -145,21 +158,57 @@ export class App implements MenuHost {
     if (this.mode === 'playing') this.startBgm();
   }
 
+  private play(w: World): Play {
+    return { char: this.charId, course: this.course, score: w.score, stats: w.stats };
+  }
+
+  /** このコースの記録（今夜のおかしは、その日の分） */
+  private records(): { best: Partial<Record<CharId, number>>; rank?: Partial<Record<CharId, RankId>> } {
+    const save = this.save;
+    if (this.course === 'night') return save.night;
+    if (this.course === 'daily') {
+      if (save.daily.day !== this.day) {
+        save.daily = { day: this.day, best: {} };
+        save.dailyDays++;
+      }
+      return save.daily;
+    }
+    return save;
+  }
+
+  /** 遊んでいる途中でたっせいしたおねがいを、ゲームの画面でお知らせする */
+  private checkLiveMissions(): void {
+    const w = this.world!;
+    for (const m of this.liveMissions) {
+      if (this.toasted.has(m.id) || playValue(m, this.play(w)) < m.goal) continue;
+      this.toasted.add(m.id);
+      this.view?.toast(m.text);
+    }
+  }
+
   private showResult(): void {
     const w = this.world!;
     const id = this.charId;
-    const prevBest = this.save.best[id] ?? 0;
-    const prevSweets = this.save.sweets;
+    const save = this.save;
+    const wasNight = nightOpen(save.rank);
+    const rec = this.records();
+    const prevBest = rec.best[id] ?? 0;
+    const prevSweets = save.sweets;
     const st = w.stats;
     const sweets = st.caught.candy + st.caught.star + st.caught.mokaron + st.caught.shucaron;
-    this.save.best[id] = Math.max(prevBest, w.score);
+    rec.best[id] = Math.max(prevBest, w.score);
     const rank = rankOf(w.score);
-    const prevRank = this.save.rank[id];
-    const order = RANKS.map((r) => r.id as string);
-    if (!prevRank || order.indexOf(rank) < order.indexOf(prevRank)) this.save.rank[id] = rank;
-    this.save.plays++;
-    this.save.sweets += sweets;
-    this.save.comforts += st.comforts;
+    if (rec.rank) {
+      const prevRank = rec.rank[id];
+      const order = RANKS.map((r) => r.id as string);
+      if (!prevRank || order.indexOf(rank) < order.indexOf(prevRank)) rec.rank[id] = rank;
+    }
+    save.plays++;
+    save.charPlays[id] = (save.charPlays[id] ?? 0) + 1;
+    save.sweets += sweets;
+    save.comforts += st.comforts;
+    const before = activeMissions(save).map((m) => m.id);
+    const cleared = judgeMissions(save, this.play(w));
     this.persist();
     this.mode = 'result';
     this.bgm.mode = 'title';
@@ -167,9 +216,9 @@ export class App implements MenuHost {
     this.show(
       resultPanel(
         this,
-        { world: w, charId: id, prevBest, prevSweets },
+        { world: w, charId: id, course: this.course, day: this.day, prevBest, prevSweets, sweets, before, cleared, nightNew: !wasNight && nightOpen(save.rank) },
         {
-          retry: () => this.start(id),
+          retry: () => this.start(id, this.course),
           select: () => this.goSelect(),
           title: () => this.goTitle(),
         },
@@ -179,11 +228,13 @@ export class App implements MenuHost {
 
   /**
    * 開発用: URL の ?dev=select|howto|settings|records|pause|play|result で画面を飛ばす（スクリーンショットの確認用）。
-   * play は &char= &t=（その秒まで進める） &cry=（スピキの泣きレベル） &fever &bot（ボットが遊ぶ）
+   * play は &char= &course=daily|night &t=（その秒まで進める） &cry=（スピキの泣きレベル） &fever &bot（ボットが遊ぶ）
    */
   devJump(q: URLSearchParams, makeBot: (w: World) => { step(): void }): void {
     const dev = q.get('dev');
     const id = (q.get('char') as CharId | null) ?? this.save.lastChar;
+    const course = q.get('course') as CourseId | null;
+    if (course) this.save.lastCourse = this.course = course;
     if (dev === 'select') return this.goSelect();
     if (dev === 'howto') return this.showHowTo(() => this.goTitle());
     if (dev === 'settings') return this.show(settingsPanel(this, { close: () => this.goTitle() }));
@@ -360,6 +411,7 @@ export class App implements MenuHost {
           world!.update(STEP);
           this.acc -= STEP;
         }
+        this.checkLiveMissions();
         if (world!.over) {
           this.mode = 'closing';
           this.timer = CLOSING;
@@ -397,6 +449,13 @@ export class App implements MenuHost {
     c.scale(s, s);
     outlined(c, String(n), 0, 0, { size: 150, font: popFont(150), fill: C.white, stroke: C.ink, width: 26 });
     c.restore();
+    // 今夜のおかし・まよなかは、ルールを出しておく
+    if (this.course === 'normal') return;
+    const rule = ruleOf(this.course, this.day);
+    const k = Math.min(1, f.w / 420);
+    const title = this.course === 'daily' ? `今夜のおかし ${dayLabel(this.day)}「${rule.name}」` : '「まよなか」モード';
+    outlined(c, title, f.x + f.w / 2, f.y + f.h * 0.4 + 120 * k, { size: 30 * k, font: popFont(30 * k), fill: this.course === 'night' ? '#c9b6ff' : C.gold, width: 7 });
+    outlined(c, rule.note, f.x + f.w / 2, f.y + f.h * 0.4 + 160 * k, { size: 18 * k, fill: C.white, width: 5 });
   }
 
   /** メニューの後ろの、おばけの国の夜景 */

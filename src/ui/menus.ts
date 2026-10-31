@@ -2,6 +2,8 @@
 import type { Sound } from '../audio/sound';
 import { BALANCE, RANKS, TITLES, rankOf, titleOf, type ItemKind, type RankId } from '../config/balance';
 import { CHARACTERS, CHAR_ORDER, type CharId } from '../config/characters';
+import { MISSIONS, activeMissions, fits, playValue, progressOf, type Mission, type Play } from '../config/missions';
+import { dailyRule, dayKey, dayLabel, nightOpen, ruleOf, type CourseId } from '../config/rules';
 import { CHAR_TEXT, DISCLAIMER, GAME_TITLE, ITEM_TEXT, RANK_TEXT, SHARE_URL, TITLE_TEXT } from '../config/text';
 import type { World } from '../sim/world';
 import type { SaveData } from '../storage';
@@ -37,6 +39,41 @@ function num(n: number): string {
 
 function rankBadge(r: RankId | undefined, cls = ''): HTMLElement {
   return h('span', { class: `rank rank-${r ?? 'none'} ${cls}`.trim() }, r ?? '−');
+}
+
+// ===================================================================== おねがい
+
+/**
+ * おねがいの 1 行。state: done = このプレイでたっせい / new = あたらしく出た / now = いまのおねがい。
+ * value を渡すと「いま」の数（ポーズ中）、渡さないと記録の数を出す
+ */
+function missionRow(m: Mission, save: SaveData, state: 'done' | 'new' | 'now' | 'got' | '' = 'now', value?: number): HTMLElement {
+  const v = value ?? progressOf(m, save);
+  let prog = '';
+  if (state === 'done') prog = 'たっせい!';
+  else if (state === 'got') prog = 'ゲット!';
+  else if (state === 'new') prog = 'NEW';
+  else if (value !== undefined && v >= m.goal) prog = 'できた!';
+  else if (m.goal > 1 && v > 0) prog = `${value === undefined && !m.total ? 'さいこう ' : ''}${num(Math.min(v, m.goal))}/${num(m.goal)}`;
+  return h(
+    'li',
+    { class: `mission ${state}`.trim() },
+    h('span', { class: 'm-text' }, m.text),
+    prog ? h('small', { class: 'm-prog' }, prog) : null,
+    h('span', { class: 'm-reward', title: 'ごほうびのおかし' }, itemCanvas('candy', 16), `+${m.reward}`),
+  );
+}
+
+/** いまのおねがい（タイトル） */
+function missionCard(host: MenuHost): HTMLElement {
+  const save = host.save;
+  const list = activeMissions(save);
+  return h(
+    'div',
+    { class: 'missions' },
+    h('div', { class: 'missions-head' }, h('b', {}, 'おねがい'), h('small', {}, `${save.missions.length} / ${MISSIONS.length} たっせい`)),
+    list.length ? h('ul', {}, ...list.map((m) => missionRow(m, save))) : h('p', { class: 'm-all' }, 'ぜんぶ たっせい！ ありがとう！'),
+  );
 }
 
 // ===================================================================== タイトル
@@ -81,6 +118,7 @@ export function titleScreen(
       btn('あそぶ', on.start, s, 'primary big'),
       h('div', { class: 'row' }, btn('あそびかた', on.howTo, s), btn('きろく', on.records, s), btn('せってい', on.settings, s)),
     ),
+    missionCard(host),
     // 称号は押すと「きろく」で一覧が見られる
     h(
       'button',
@@ -107,9 +145,25 @@ function nextTitle(total: number): (typeof TITLES)[number] | undefined {
 
 // ===================================================================== キャラえらび
 
-export function charSelect(host: MenuHost, on: { pick: (id: CharId) => void; back: () => void }): HTMLElement {
+export function charSelect(host: MenuHost, on: { pick: (id: CharId, course: CourseId) => void; back: () => void }): HTMLElement {
   const s = host.sound;
-  let chosen: CharId = host.save.lastChar;
+  const save = host.save;
+  let chosen: CharId = save.lastChar;
+  const today = dayKey();
+  const nightOK = nightOpen(save.rank);
+  let course: CourseId = save.lastCourse === 'night' && !nightOK ? 'normal' : save.lastCourse;
+  const wishes = activeMissions(save);
+  /** えらんでいるコースの記録（今夜のおかしは、きょうの分） */
+  const recordOf = (id: CharId): { best?: number; rank?: RankId } => {
+    if (course === 'night') return { best: save.night.best[id], rank: save.night.rank[id] };
+    if (course === 'daily') {
+      const best = save.daily.day === today ? save.daily.best[id] : undefined;
+      return { best, rank: best === undefined ? undefined : rankOf(best) };
+    }
+    return { best: save.best[id], rank: save.rank[id] };
+  };
+  const badgeSlots = new Map<CharId, HTMLElement>();
+  const bestSlots = new Map<CharId, HTMLElement>();
   // 5 人分の説明を同じ場所に重ねて、えらんだ人だけ見せる（説明の長さでボタンの位置が動かない）
   const details = h('div', { class: 'details' });
   const detailEls = new Map<CharId, HTMLElement>();
@@ -119,7 +173,8 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId) => void; bac
   const detailOf = (id: CharId) => {
     const d = CHARACTERS[id];
     const tx = CHAR_TEXT[id];
-    const best = host.save.best[id];
+    const bestSlot = h('p', { class: 'best-line' });
+    bestSlots.set(id, bestSlot);
     return h(
       'div',
       { class: 'detail', style: `--c:${C[id]}` },
@@ -134,7 +189,7 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId) => void; bac
         h('div', { class: 'stat' }, h('span', {}, 'かんたん'), starsText(d.stars.easy)),
       ),
       h('p', { class: 'ability' }, tx.ability),
-      h('p', { class: 'best-line' }, 'ベスト ', h('b', {}, best ? num(best) : '−'), ' ', rankBadge(host.save.rank[id], 'small')),
+      bestSlot,
     );
   };
   const showDetail = () => {
@@ -142,8 +197,57 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId) => void; bac
     for (const [cid, el] of cardEls) el.classList.toggle('on', cid === chosen);
   };
 
+  // コース（ふつう・今夜のおかし・まよなか）
+  const note = h('p', { class: 'course-note' });
+  const tabs = new Map<CourseId, HTMLButtonElement>();
+  const courseList: [CourseId, string, string][] = [
+    ['normal', 'ふつう', ''],
+    ['daily', '今夜のおかし', dayLabel(today)],
+    ['night', 'まよなか', nightOK ? '' : 'ランク S で'],
+  ];
+  const courseRow = h('div', { class: 'courses', role: 'tablist' });
+  for (const [cid, label, sub] of courseList) {
+    const tab = h(
+      'button',
+      {
+        class: `tab${wishes.some((m) => m.course === cid) ? ' wish' : ''}`,
+        type: 'button',
+        role: 'tab',
+        disabled: cid === 'night' && !nightOK,
+        onclick: () => {
+          if (course === cid) return;
+          course = cid;
+          s.click();
+          showCourse();
+        },
+      },
+      label,
+      sub ? h('small', {}, sub) : null,
+    );
+    tabs.set(cid, tab);
+    courseRow.append(tab);
+  }
+  const showCourse = () => {
+    for (const [cid, tab] of tabs) {
+      tab.classList.toggle('on', cid === course);
+      tab.setAttribute('aria-selected', String(cid === course));
+    }
+    const r = ruleOf(course, today);
+    note.replaceChildren(course === 'daily' ? h('b', {}, `${r.name}　`) : '', r.note);
+    note.className = `course-note ${course}`;
+    for (const id of CHAR_ORDER) {
+      const rec = recordOf(id);
+      badgeSlots.get(id)!.replaceChildren(rankBadge(rec.rank, 'small'));
+      bestSlots.get(id)!.replaceChildren(course === 'daily' ? 'きょうのベスト ' : 'ベスト ', h('b', {}, rec.best ? num(rec.best) : '−'), ' ', rankBadge(rec.rank, 'small'));
+      // このキャラ・コースで数えるおねがいがあれば、カードに印
+      cardEls.get(id)!.classList.toggle('wish', wishes.some((m) => m.char === id && fits(m, id, course)));
+    }
+  };
+
   for (const id of CHAR_ORDER) {
     const tx = CHAR_TEXT[id];
+    const badgeSlot = h('span', { class: 'badge-slot' });
+    badgeSlots.set(id, badgeSlot);
     const card = h(
       'button',
       {
@@ -163,7 +267,7 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId) => void; bac
       },
       mochiChibi(CHAR_SPECS[id], 'normal', 30, { sound: s }),
       h('span', { class: 'card-name' }, h('small', {}, tx.costume), tx.name),
-      rankBadge(host.save.rank[id], 'small'),
+      badgeSlot,
     );
     cardEls.set(id, card);
     cards.append(card);
@@ -172,15 +276,19 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId) => void; bac
     details.append(detail);
   }
   const start = () => {
-    host.save.lastChar = chosen;
+    save.lastChar = chosen;
+    save.lastCourse = course;
     host.persist();
-    on.pick(chosen);
+    on.pick(chosen, course);
   };
   showDetail();
+  showCourse();
   return h(
     'div',
     { class: 'panel select' },
     h('h2', {}, 'だれで あそぶ？'),
+    courseRow,
+    note,
     cards,
     details,
     h('div', { class: 'row' }, btn('もどる', on.back, s), btn('スタート!', start, s, 'primary')),
@@ -198,6 +306,30 @@ export function recordsPanel(host: MenuHost, on: { close: () => void }): HTMLEle
   // つぎの称号までの進み具合（ひとつ前の称号から数える）
   const from = [...TITLES].find((x) => x.min <= total)?.min ?? 0;
   const ratio = next ? (total - from) / (next.min - from) : 1;
+  const today = dayKey();
+  const now = activeMissions(save);
+  const dailyBest =
+    save.daily.day === today
+      ? CHAR_ORDER.map((id) => [id, save.daily.best[id] ?? -1] as const)
+          .filter(([, v]) => v >= 0)
+          .sort((a, b) => b[1] - a[1])[0]
+      : undefined;
+  /** キャラごとのベストとランク */
+  const charGrid = (best: Partial<Record<CharId, number>>, rank: Partial<Record<CharId, RankId>>) =>
+    h(
+      'div',
+      { class: 'rec-chars' },
+      ...CHAR_ORDER.map((id) =>
+        h(
+          'div',
+          { class: 'rec-char', style: `--c:${C[id]}` },
+          mochiChibi(CHAR_SPECS[id], best[id] ? 'smile' : 'normal', 18, { sound: s, body: false }),
+          h('span', { class: 'card-name' }, CHAR_TEXT[id].name),
+          h('b', {}, best[id] ? num(best[id]) : '−'),
+          rankBadge(rank[id], 'small'),
+        ),
+      ),
+    );
   return h(
     'div',
     { class: 'panel records' },
@@ -224,21 +356,19 @@ export function recordsPanel(host: MenuHost, on: { close: () => void }): HTMLEle
         ),
       ),
     ),
-    h('p', { class: 'rec-note' }, 'おかしは あそぶたびに たまっていきます'),
+    h('p', { class: 'rec-note' }, 'おかしは あそぶたびと、おねがいの ごほうびで たまっていきます'),
     h(
-      'div',
-      { class: 'rec-chars' },
-      ...CHAR_ORDER.map((id) =>
-        h(
-          'div',
-          { class: 'rec-char', style: `--c:${C[id]}` },
-          mochiChibi(CHAR_SPECS[id], save.best[id] ? 'smile' : 'normal', 18, { sound: s, body: false }),
-          h('span', { class: 'card-name' }, CHAR_TEXT[id].name),
-          h('b', {}, save.best[id] ? num(save.best[id]) : '−'),
-          rankBadge(save.rank[id], 'small'),
-        ),
-      ),
+      'details',
+      { class: 'rec-missions' },
+      h('summary', {}, `おねがい ${save.missions.length} / ${MISSIONS.length} たっせい`),
+      h('ul', {}, ...MISSIONS.map((m) => missionRow(m, save, save.missions.includes(m.id) ? 'got' : now.includes(m) ? 'now' : ''))),
     ),
+    h('h3', { class: 'rec-sub' }, 'ふつう'),
+    charGrid(save.best, save.rank),
+    nightOpen(save.rank) ? h('h3', { class: 'rec-sub' }, 'まよなか') : null,
+    nightOpen(save.rank) ? charGrid(save.night.best, save.night.rank) : null,
+    h('h3', { class: 'rec-sub' }, `今夜のおかし（${dayLabel(today)}・${dailyRule(today).name}）`),
+    h('p', { class: 'rec-daily' }, h('small', {}, `きょうのベスト `), h('b', {}, dailyBest ? `${num(dailyBest[1])}（${CHAR_TEXT[dailyBest[0]].name}）` : '−'), h('small', {}, `　あそんだ日 ${save.dailyDays} 日`)),
     h('div', { class: 'row' }, btn('とじる', on.close, s, 'primary')),
   );
 }
@@ -328,13 +458,18 @@ export function settingsPanel(host: MenuHost, on: { close: () => void }): HTMLEl
 
 // ===================================================================== ポーズ
 
-export function pausePanel(host: MenuHost, on: { resume: () => void; retry: () => void; select: () => void; howTo: () => void }): HTMLElement {
+export function pausePanel(host: MenuHost, play: Play, on: { resume: () => void; retry: () => void; select: () => void; howTo: () => void }): HTMLElement {
   const s = host.sound;
+  const save = host.save;
+  const list = activeMissions(save);
+  // いまのプレイで数えるものは「いま」の数を、そうでないもの（記録で数える・ほかのキャラ）は記録を出す
+  const rows = list.map((m) => (fits(m, play.char, play.course) ? missionRow(m, save, 'now', playValue(m, play)) : missionRow(m, save)));
   return h(
     'div',
     { class: 'panel pause' },
     h('h2', {}, 'ひとやすみ'),
     h('div', { class: 'col' }, btn('つづける', on.resume, s, 'primary'), btn('やりなおす', on.retry, s), btn('あそびかた', on.howTo, s), btn('キャラえらびへ', on.select, s)),
+    rows.length ? h('div', { class: 'missions' }, h('div', { class: 'missions-head' }, h('b', {}, 'おねがい'), h('small', {}, 'おわった時に たっせい')), h('ul', {}, ...rows)) : null,
   );
 }
 
@@ -343,8 +478,21 @@ export function pausePanel(host: MenuHost, on: { resume: () => void; retry: () =
 export interface ResultInfo {
   world: World;
   charId: CharId;
+  course: CourseId;
+  /** 遊んだ日（今夜のおかし） */
+  day: string;
+  /** このコースの、前のベスト */
   prevBest: number;
+  /** 遊ぶ前の、今までのおかし */
   prevSweets: number;
+  /** このプレイで取ったおかし */
+  sweets: number;
+  /** 遊ぶ前のおねがい（id） */
+  before: string[];
+  /** このプレイでたっせいしたおねがい */
+  cleared: Mission[];
+  /** まよなかモードがあそべるようになった */
+  nightNew: boolean;
 }
 
 export function resultPanel(host: MenuHost, info: ResultInfo, on: { retry: () => void; select: () => void; title: () => void }): HTMLElement {
@@ -360,10 +508,23 @@ export function resultPanel(host: MenuHost, info: ResultInfo, on: { retry: () =>
   const isBest = score > info.prevBest && score > 0;
   const st = w.stats;
   const caught = (k: ItemKind) => st.caught[k];
-  const sweets = caught('candy') + caught('star') + caught('mokaron') + caught('shucaron');
+  const sweets = info.sweets;
+  const save = host.save;
+  const reward = info.cleared.reduce((a, m) => a + m.reward, 0);
+  const total = save.sweets;
   const before = titleOf(info.prevSweets);
-  const after = titleOf(info.prevSweets + sweets);
-  const next = nextTitle(info.prevSweets + sweets);
+  const after = titleOf(total);
+  const next = nextTitle(total);
+  const rule = ruleOf(info.course, info.day);
+  const courseLabel = info.course === 'daily' ? `今夜のおかし ${dayLabel(info.day)}` : info.course === 'night' ? 'まよなかモード' : '';
+  const bestLabel = info.course === 'daily' ? 'きょうのベスト' : 'ベスト';
+  // おねがい: たっせいしたもの → いまのおねがい（あたらしく出たものは NEW）
+  const now = activeMissions(save);
+  const missionRows = [
+    ...info.cleared.map((m) => missionRow(m, save, 'done')),
+    ...now.map((m) => missionRow(m, save, info.before.includes(m.id) ? 'now' : 'new')),
+  ];
+  const unplayed = CHAR_ORDER.filter((c) => !save.charPlays[c]);
   const nextRank = [...RANKS].reverse().find((r) => r.min > score);
 
   const scoreEl = h('div', { class: 'score' }, '0');
@@ -386,7 +547,8 @@ export function resultPanel(host: MenuHost, info: ResultInfo, on: { retry: () =>
     h('li', {}, kind ? itemCanvas(kind, 30) : h('span', { class: 'dot' }), h('span', { class: 'k' }, label), h('b', {}, value));
 
   const share = () => {
-    const text = `『${GAME_TITLE}』で${tx.costume}${tx.name}が ${num(score)}点（ランク${rank}）！ #トリッカルオアトリート #トリッカル`;
+    const where = info.course === 'daily' ? `の今夜のおかし（${dayLabel(info.day)}・${rule.name}）` : info.course === 'night' ? 'のまよなかモード' : '';
+    const text = `『${GAME_TITLE}』${where}で${tx.costume}${tx.name}が ${num(score)}点（ランク${rank}）！ #トリッカルオアトリート #トリッカル`;
     const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(SHARE_URL)}`;
     window.open(url, '_blank', 'noopener');
   };
@@ -402,10 +564,11 @@ export function resultPanel(host: MenuHost, info: ResultInfo, on: { retry: () =>
       h(
         'div',
         { class: 'score-box' },
+        courseLabel ? h('small', { class: `course-tag ${info.course}` }, courseLabel) : null,
         h('small', {}, `${tx.costume}${tx.name}`),
         scoreEl,
         h('div', { class: 'rank-row' }, stamp, h('span', { class: 'rank-text' }, RANK_TEXT[rank])),
-        isBest ? h('div', { class: 'new' }, 'ベスト更新!') : h('div', { class: 'prev' }, `ベスト ${num(info.prevBest)}`),
+        isBest ? h('div', { class: 'new' }, 'ベスト更新!') : h('div', { class: 'prev' }, `${bestLabel} ${num(info.prevBest)}`),
       ),
     ),
     h('p', { class: 'line' }, `「${line}」`),
@@ -422,15 +585,32 @@ export function resultPanel(host: MenuHost, info: ResultInfo, on: { retry: () =>
       row(null, 'スピキをなぐさめた', `${st.comforts} 回`),
     ),
     nextRank ? h('p', { class: 'next-rank' }, `ランク${nextRank.id}まで あと ${num(nextRank.min - score)} 点`) : null,
+    info.nightNew ? h('p', { class: 'unlock' }, '「まよなか」モードが あそべるようになった！（キャラえらびで）') : null,
+    missionRows.length
+      ? h(
+          'div',
+          { class: 'missions' },
+          h('div', { class: 'missions-head' }, h('b', {}, 'おねがい'), h('small', {}, `${save.missions.length} / ${MISSIONS.length} たっせい`)),
+          h('ul', {}, ...missionRows),
+        )
+      : null,
     h(
       'p',
       { class: 'title-line' },
-      `おかし +${sweets} こ（今までに ${num(info.prevSweets + sweets)} こ）`,
+      `おかし +${sweets} こ`,
+      reward ? h('b', { class: 'reward' }, `　おねがいのごほうび +${reward} こ`) : null,
+      `（今までに ${num(total)} こ）`,
       after && after !== before ? h('b', { class: 'new-title' }, ` 称号「${TITLE_TEXT[after]}」をゲット!`) : null,
-      next && !(after && after !== before) ? h('small', {}, ` つぎの称号まで あと ${num(next.min - info.prevSweets - sweets)} こ`) : null,
+      next && !(after && after !== before) ? h('small', {}, ` つぎの称号まで あと ${num(next.min - total)} こ`) : null,
     ),
-    h('div', { class: 'row' }, btn('キャラえらび', on.select, s), btn('もう一回!', on.retry, s, 'primary')),
-    h('div', { class: 'row small' }, btn('タイトルへ', on.title, s, 'ghost'), btn('X でシェア', share, s, 'ghost share')),
+    unplayed.length ? h('p', { class: 'hint-line' }, `まだ あそんでいない: ${unplayed.map((c) => CHAR_TEXT[c].name).join('・')}`) : null,
+    // スマホで下まで長くなっても、ボタンは画面の下に残す
+    h(
+      'div',
+      { class: 'result-actions' },
+      h('div', { class: 'row' }, btn('キャラえらび', on.select, s), btn('もう一回!', on.retry, s, 'primary')),
+      h('div', { class: 'row small' }, btn('タイトルへ', on.title, s, 'ghost'), btn('X でシェア', share, s, 'ghost share')),
+    ),
   );
 }
 

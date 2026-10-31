@@ -1,6 +1,7 @@
 // ゲームの中身（描画や DOM に触らない）。ボットのシミュレーションと単体テストからも同じものを動かす。
 import { BALANCE, chainMultiplier, lerp2, type ItemKind } from '../config/balance';
 import { CHARACTERS, DRAIN_FREEZE, type CharDef, type CharId } from '../config/characters';
+import { NORMAL, type Rule } from '../config/rules';
 import { normalPattern, feverX, type Spawn } from './patterns';
 import { Rng } from './rng';
 
@@ -49,6 +50,8 @@ export interface Stats {
   /** 地面に落ちたホバギの数（スピキを泣かせた数） */
   cries: number;
   comforts: number;
+  /** なぐさめた時の泣きレベルのさいだい */
+  maxComfort: number;
   /** おかえしで取った数 */
   gifts: number;
   fevers: number;
@@ -80,6 +83,8 @@ export interface Input {
 export class World {
   readonly char: CharDef;
   readonly rng: Rng;
+  /** コースのルール（今夜のおかし・まよなか） */
+  readonly rule: Rule;
   /** キャッチの高さ（キャラの頭の中心。縦の正規化座標）。画面の縦横比で変わる（遊んでいる途中に画面を回したら変える） */
   catchY: number;
   time = 0;
@@ -103,6 +108,7 @@ export class World {
     hits: 0,
     cries: 0,
     comforts: 0,
+    maxComfort: 0,
     gifts: 0,
     fevers: 0,
     maxChain: 0,
@@ -118,10 +124,11 @@ export class World {
   private spurtShown = false;
   private lastTick = 99;
 
-  constructor(charId: CharId, seed: number, catchY = 0.8) {
+  constructor(charId: CharId, seed: number, catchY = 0.8, rule: Rule = NORMAL) {
     this.char = CHARACTERS[charId];
     this.rng = new Rng(seed);
     this.catchY = catchY;
+    this.rule = rule;
   }
 
   /** 残り秒（フィーバーで延長中は 0） */
@@ -144,11 +151,11 @@ export class World {
   }
 
   get feverNeed(): number {
-    return this.char.feverNeed ?? BALANCE.fever.need;
+    return Math.max(2, (this.char.feverNeed ?? BALANCE.fever.need) + (this.rule.feverNeed ?? 0));
   }
 
   get multiplier(): number {
-    return chainMultiplier(this.chain);
+    return chainMultiplier(this.chain, this.rule.chainStep);
   }
 
   /** キャッチの半幅 */
@@ -163,7 +170,7 @@ export class World {
 
   /** 上端からキャッチの高さまでの秒数 */
   fallTime(kind: ItemKind): number {
-    return lerp2(BALANCE.fall[kind], this.progress);
+    return lerp2(BALANCE.fall[kind], this.progress) * (this.rule.fall ?? 1);
   }
 
   update(dt: number): void {
@@ -228,7 +235,7 @@ export class World {
       if (this.time >= this.nextBeat) {
         const u = this.progress;
         const len = normalPattern(this, this.time, (s) => this.queue.push(s));
-        const gap = lerp2(BALANCE.gap, u) * (this.spurt ? BALANCE.spurtGap : 1);
+        const gap = lerp2(BALANCE.gap, u) * (this.spurt ? BALANCE.spurtGap : 1) * (this.rule.gap ?? 1);
         this.nextBeat = this.time + len + gap;
       }
       if (this.time >= this.nextMokaron) {
@@ -255,7 +262,7 @@ export class World {
       x = far;
     } else x = this.rng.range(0.1, 0.9);
     this.queue.push({ at: this.time, kind: 'mokaron', x });
-    if (this.progress > 0.35 && this.rng.next() < 0.35) {
+    if (this.progress > 0.35 && this.rng.next() < Math.min(0.8, 0.35 * (this.rule.hobagi ?? 1))) {
       const side = x < 0.5 ? 1 : -1;
       this.queue.push({ at: this.time + 0.25, kind: 'hobagi', x: clampX(x + side * 0.1) });
     }
@@ -338,7 +345,7 @@ export class World {
     this.lastCatch = this.time;
     this.stats.maxChain = Math.max(this.stats.maxChain, this.chain);
     const mult = this.multiplier;
-    const pts = Math.round((BALANCE.points[it.kind] + (this.char.bonus?.[it.kind] ?? 0)) * mult);
+    const pts = Math.round((BALANCE.points[it.kind] + (this.char.bonus?.[it.kind] ?? 0)) * mult * (this.rule.points ?? 1));
     this.score += pts;
     if (this.fever > 0) this.stats.feverScore += pts;
     this.stats.caught[it.kind]++;
@@ -368,13 +375,13 @@ export class World {
         return;
       case 'guard': {
         // バター: ほうたいで受けて、ひるまない。減点は半分、れんぞくもそのまま
-        const pts = Math.round(BALANCE.points.hobagi / 2);
+        const pts = Math.round((BALANCE.points.hobagi / 2) * (this.rule.points ?? 1));
         this.score = Math.max(0, this.score + pts);
         this.events.push({ type: 'hit', x: it.x, y: it.y, pts, guarded: true });
         return;
       }
       case 'hit': {
-        const pts = BALANCE.points.hobagi;
+        const pts = Math.round(BALANCE.points.hobagi * (this.rule.points ?? 1));
         this.score = Math.max(0, this.score + pts);
         p.stun = BALANCE.stun;
         this.events.push({ type: 'hit', x: it.x, y: it.y, pts, guarded: false });
@@ -429,12 +436,17 @@ export class World {
    * なぐさめる（タップ・ほっぺを引っぱって離した・↑キー）。泣いていれば泣き止んで、泣きレベルに応じた
    * おかえしをプレイヤーの近くへ投げてくれる。extra = ほっぺをむにーっと伸ばしてから離した時に増える数。泣いていなければ何もしない
    */
+  /** 泣きレベルごとのおかえしの数（ほっぺを伸ばした分は入らない） */
+  giftCount(level: number): number {
+    return Math.round(BALANCE.spiki.gift[level] * (this.rule.gift ?? 1));
+  }
+
   comfort(extra = 0): boolean {
     const s = this.spiki;
     if (s.level <= 0 || this.over) return false;
     const S = BALANCE.spiki;
     const level = s.level;
-    const n = S.gift[level] + extra;
+    const n = this.giftCount(level) + extra;
     const mok = S.giftMokaron[level];
     // モカロンはおかえしの真ん中あたりに混ぜる
     const mokAt = new Set<number>();
@@ -455,6 +467,7 @@ export class World {
     s.cry = 0;
     s.happy = S.happy;
     this.stats.comforts++;
+    this.stats.maxComfort = Math.max(this.stats.maxComfort, level);
     this.events.push({ type: 'comfort', level, gifts: n });
     return true;
   }
@@ -463,7 +476,7 @@ export class World {
 
   private startFever(): void {
     const F = BALANCE.fever;
-    this.feverLen = F.duration + (this.char.feverBonus ?? 0);
+    this.feverLen = (F.duration + (this.char.feverBonus ?? 0)) * (this.rule.feverLen ?? 1);
     this.fever = this.feverLen;
     this.feverT = 0;
     this.gauge = 0;

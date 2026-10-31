@@ -278,6 +278,11 @@ export class Sound {
     [1319, 1047, 784].forEach((f, i) => this.bell(f, i * 0.1, 0.1, 0.5));
   }
 
+  /** おねがいをたっせいした（ゲームの途中） */
+  mission(): void {
+    [1318, 1760].forEach((f, i) => this.bell(f, i * 0.09, 0.11, 0.5));
+  }
+
   lastSpurt(): void {
     [659, 784, 659, 988].forEach((f, i) => this.tone(f, 0.1, { type: 'square', vol: 0.08, at: i * 0.09 }));
   }

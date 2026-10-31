@@ -31,6 +31,8 @@ const KIND_COLOR: Record<ItemKind, string> = {
   hobagi: C.orange,
 };
 
+/** おねがいたっせいのお知らせを出しておく秒数 */
+const TOAST = 2.6;
 const CRY_TEXT = ['', 'ｳｪｪﾝ…', 'ｳｱｱｰﾝ!!', 'ｳｱｱｱｱｱﾝ!!!'];
 
 interface Banner {
@@ -99,6 +101,7 @@ export class GameView {
   private landed: Landed[] = [];
   private flying: Flying[] = [];
   private banners: Banner[] = [];
+  private toasts: { text: string; t: number }[] = [];
   private shownScore = 0;
   private scorePop = 0;
   private chainPop = 0;
@@ -304,6 +307,11 @@ export class GameView {
 
   // ===================================================================== 更新
 
+  /** おねがいをたっせいした時のお知らせ（画面の上のほうに、1 つずつ） */
+  toast(text: string): void {
+    this.toasts.push({ text, t: 0 });
+  }
+
   banner(text: string, color: string, max = 1.3, size = 76, sub?: string): void {
     this.banners = this.banners.filter((b) => b.t < 0.2);
     this.banners.push({ text, color, t: 0, max, size, sub });
@@ -360,6 +368,12 @@ export class GameView {
     for (const l of this.landed) l.t += dt;
     this.landed = this.landed.filter((l) => l.t < (l.kind === 'hobagi' ? 1.3 : 0.5));
     for (const b of this.banners) b.t += dt;
+    if (this.toasts.length) {
+      const first = this.toasts[0];
+      if (first.t === 0) this.sound.mission();
+      first.t += dt;
+      if (first.t > TOAST) this.toasts.shift();
+    }
     this.banners = this.banners.filter((b) => b.t < b.max);
 
     const diff = w.score - this.shownScore;
@@ -549,6 +563,7 @@ export class GameView {
     this.drawHud(c);
     this.drawHints(c);
     this.drawBanners(c);
+    this.drawToast(c);
   }
 
   private drawFeverBack(c: CanvasRenderingContext2D): void {
@@ -595,7 +610,7 @@ export class GameView {
     const w = this.world;
     const r = this.L.spiki.r * 0.62;
     const left = w.spiki.cry / BALANCE.spiki.cry;
-    const n = BALANCE.spiki.gift[w.spiki.level];
+    const n = w.giftCount(w.spiki.level);
     const pulse = 1 + Math.sin(this.t * 10) * 0.05;
     c.save();
     c.translate(x, y);
@@ -983,6 +998,36 @@ export class GameView {
       outlined(c, text, x, y, { size, fill: '#bff0ff', width: 5 });
       c.restore();
     }
+  }
+
+  private drawToast(c: CanvasRenderingContext2D): void {
+    const ts = this.toasts[0];
+    if (!ts) return;
+    const L = this.L;
+    const f = L.field;
+    const k = Math.min(1, f.w / 420);
+    // 上から すっと出て、少しとまって、上へもどる
+    const inK = Math.min(1, ts.t / 0.25);
+    const outK = Math.max(0, (ts.t - (TOAST - 0.3)) / 0.3);
+    const ease = (x: number) => 1 - Math.pow(1 - x, 3);
+    const y = f.y + 14 * k - (1 - ease(inK) + ease(outK)) * 40 * k;
+    const head = 'おねがい たっせい!';
+    c.save();
+    c.globalAlpha = Math.min(ease(inK), 1 - outK);
+    c.font = font(17 * k);
+    const tw = Math.max(c.measureText(ts.text).width, c.measureText(head).width * 1.2);
+    const w = Math.min(f.w - 24, tw + 44 * k);
+    const h = 58 * k;
+    const x = f.x + (f.w - w) / 2;
+    roundRect(c, x, y, w, h, h / 2);
+    c.fillStyle = 'rgba(40, 20, 70, 0.92)';
+    c.fill();
+    c.strokeStyle = C.gold;
+    c.lineWidth = 3;
+    c.stroke();
+    outlined(c, head, f.x + f.w / 2, y + h * 0.36, { size: 19 * k, font: popFont(19 * k), fill: C.gold, width: 5 });
+    outlined(c, ts.text, f.x + f.w / 2, y + h * 0.74, { size: 15 * k, fill: C.white, width: 4 });
+    c.restore();
   }
 
   private drawBanners(c: CanvasRenderingContext2D): void {

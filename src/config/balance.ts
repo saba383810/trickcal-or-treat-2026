@@ -100,10 +100,10 @@ export function lerp2(pair: readonly [number, number], u: number): number {
   return pair[0] + (pair[1] - pair[0]) * Math.min(1, Math.max(0, u));
 }
 
-/** れんぞく数 → 倍率 */
-export function chainMultiplier(chain: number): number {
+/** れんぞく数 → 倍率（step 個ごとに上がる） */
+export function chainMultiplier(chain: number, step: number = BALANCE.chain.step): number {
   const c = BALANCE.chain;
-  return Math.min(c.max, 1 + c.per * Math.floor(chain / c.step));
+  return Math.min(c.max, 1 + c.per * Math.floor(chain / step));
 }
 
 /** ランク（下限の点数）。ボットで調整する */

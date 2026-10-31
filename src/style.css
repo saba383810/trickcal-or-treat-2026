@@ -54,11 +54,11 @@ body {
 }
 
 .layer {
+  --pad-b: max(12px, env(safe-area-inset-bottom));
   position: absolute;
   inset: 0;
   display: flex;
-  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom))
-    max(12px, env(safe-area-inset-left));
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) var(--pad-b) max(12px, env(safe-area-inset-left));
   /* 縦だけスクロールする。ほっぺを引っぱる時の重ねた canvas が画面の端からはみ出しても、横には動かさない */
   overflow: hidden auto;
   overscroll-behavior: contain;
@@ -982,6 +982,322 @@ canvas.pic {
   line-height: 1;
 }
 
+/* ------------------------------------------------------------------ おねがい */
+
+.missions {
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px 10px 10px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.75);
+  border: 2px solid #e2d4f0;
+  border-radius: 14px;
+}
+
+.missions-head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  padding: 0 4px;
+}
+
+.missions-head b {
+  font-family: var(--pop);
+  font-size: 17px;
+  font-weight: 400;
+  color: var(--orange-deep);
+}
+
+.missions-head small {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.missions ul,
+.rec-missions ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mission {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 8px;
+  align-items: center;
+  padding: 5px 10px;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--ink);
+  background: #fff;
+  border: 2px solid #eadff5;
+  border-radius: 10px;
+}
+
+.m-prog {
+  grid-row: 2;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.m-reward {
+  display: inline-flex;
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  gap: 2px;
+  align-items: center;
+  font-family: var(--pop);
+  font-size: 14px;
+  color: var(--orange-deep);
+  white-space: nowrap;
+}
+
+.mission.done,
+.mission.got {
+  background: #fff6dc;
+  border-color: var(--gold);
+}
+
+.mission.done .m-prog,
+.mission.got .m-prog {
+  font-weight: 800;
+  color: var(--orange-deep);
+}
+
+.mission.done .m-text::before,
+.mission.got .m-text::before {
+  content: '✓ ';
+  font-weight: 800;
+  color: var(--orange-deep);
+}
+
+.mission.new {
+  border-style: dashed;
+  border-color: var(--pink);
+}
+
+.mission.new .m-prog {
+  font-weight: 800;
+  color: #e0507e;
+}
+
+/* まだ出ていないおねがい（きろくの一覧） */
+.mission:not(.done, .got, .new, .now) {
+  color: var(--ink-soft);
+  background: rgba(255, 255, 255, 0.5);
+  border-style: dashed;
+}
+
+/* けっかでは 1 行に（ボタンが遠くならないように） */
+.result .mission {
+  grid-template-columns: 1fr auto auto;
+  padding: 4px 10px;
+}
+
+.result .m-prog {
+  grid-row: 1;
+  grid-column: 2;
+}
+
+.result .m-reward {
+  grid-row: 1;
+  grid-column: 3;
+}
+
+/* けっかが画面より長い時も、ボタンは画面のいちばん下に残す（下の余白はパネルの余白のかわり。ホームバーの分も空ける） */
+.result-actions {
+  position: sticky;
+  bottom: calc(-1 * var(--pad-b));
+  z-index: 1;
+  margin: 10px -22px -18px;
+  padding: 4px 22px calc(6px + var(--pad-b));
+  background: inherit;
+  border-radius: 0 0 18px 18px;
+  box-shadow: 0 -10px 12px -8px rgba(74, 42, 63, 0.2);
+}
+
+/* タイトルでは、夜の上に */
+.title .missions {
+  width: min(440px, 100%);
+  margin-top: 0;
+  background: rgba(40, 20, 70, 0.75);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.title .missions-head b {
+  color: var(--gold);
+}
+
+.title .missions-head small {
+  color: #d9cdf0;
+}
+
+.title .mission {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.title .m-prog {
+  color: #d9cdf0;
+}
+
+.title .m-reward {
+  color: var(--gold);
+}
+
+.m-all {
+  font-size: 14px;
+  text-align: center;
+}
+
+.pause .missions {
+  margin-top: 16px;
+}
+
+.unlock,
+.hint-line {
+  margin-top: 8px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.unlock {
+  font-weight: 800;
+  color: #6b4bc4;
+}
+
+.hint-line {
+  color: var(--ink-soft);
+}
+
+.title-line .reward {
+  color: var(--orange-deep);
+}
+
+/* ------------------------------------------------------------------ コース */
+
+.courses {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.tab {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.15;
+  color: var(--ink-soft);
+  cursor: pointer;
+  background: #fff;
+  border: 2px solid #d9cce8;
+  border-radius: 12px;
+}
+
+.tab small {
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.tab.on {
+  color: #fff;
+  background: var(--frame);
+  border-color: var(--line-ink);
+}
+
+.tab:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+/* おねがいで使うコース・キャラの印 */
+.tab.wish::after,
+.card.wish::after {
+  position: absolute;
+  top: -5px;
+  left: -5px;
+  width: 14px;
+  height: 14px;
+  content: '';
+  background: var(--pink);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--line-ink);
+}
+
+.course-note {
+  min-height: 1.4em;
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+.course-note b {
+  color: var(--orange-deep);
+}
+
+.course-note.night {
+  color: #6b4bc4;
+}
+
+.course-tag {
+  font-weight: 800;
+  color: var(--orange-deep);
+}
+
+.course-tag.night {
+  color: #6b4bc4;
+}
+
+/* きろく */
+.rec-sub {
+  margin: 14px 0 6px;
+  font-size: 14px;
+  color: var(--ink);
+  text-align: center;
+}
+
+.rec-daily {
+  font-size: 14px;
+  text-align: center;
+}
+
+.rec-daily small {
+  color: var(--ink-soft);
+}
+
+.rec-missions {
+  margin-top: 14px;
+}
+
+.rec-missions summary {
+  padding: 8px 12px;
+  font-weight: 800;
+  color: var(--orange-deep);
+  cursor: pointer;
+  background: #fff6dc;
+  border: 2px solid var(--gold);
+  border-radius: 12px;
+}
+
+.rec-missions ul {
+  margin-top: 6px;
+}
+
 /* ------------------------------------------------------------------ 小さい画面 */
 
 @media (max-width: 560px) {
@@ -1036,6 +1352,20 @@ canvas.pic {
 
   .spiki-tip {
     flex-direction: column;
+  }
+
+  .tab {
+    min-height: 38px;
+    font-size: 13px;
+  }
+
+  .mission {
+    font-size: 12px;
+  }
+
+  .result-actions {
+    margin: 10px -12px -14px;
+    padding: 2px 12px calc(2px + var(--pad-b));
   }
 }
 

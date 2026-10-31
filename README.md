@@ -10,6 +10,8 @@ GiGO コラボ「トリッカル or トリート!!」の仮装をした 5 人で
 - **モカロン** 5 個で **フィーバー**（6 秒）。シューカロン（+50）の大雨
 - 残り 15 秒で **ラストスパート**（お菓子が増える・BGM が速くなる）
 - キャラごとのベストスコアとランク（SS / S / A / B / C）、累計のおかしで称号（タイトルの「きろく」で一覧・つぎの称号までの数が見られる）
+- **おねがい**: 小さな目標が 3 つずつ出て、たっせいすると次が出る（全 38 こ）。ごほうびのおかしで称号も近くなる
+- **コース**: ふつう / **今夜のおかし**（日替わりのルール。同じ日はみんな同じルール） / **まよなか**（速くてホバギが多い。ふつうでランク S を取るとあそべる）
 - タイトル・キャラえらび・リザルトのキャラも、ほっぺを引っぱれる（[エシュールのパン屋さん](https://github.com/saba383810/trickcal-ashur-bakery) のもちほっぺの移植）
 
 | キャラ | 仮装 | とくせい |
@@ -38,14 +40,14 @@ GiGO コラボ「トリッカル or トリート!!」の仮装をした 5 人で
 npm ci
 npm run dev      # http://localhost:5173/
 npm test         # ロジックの単体テスト（vitest）
-npm run sim      # ボットによるバランス確認（キャラ × 腕前ごとのスコア分布・ランク分布。RUNS=120 で回数を指定）
+npm run sim      # ボットによるバランス確認（キャラ × 腕前ごとのスコア分布・ランク分布・おねがいのたっせい率。RUNS=120 で回数、RULE=night などでコースのルール）
 npm run build    # 型チェック + 本番ビルド（dist/）
 ```
 
 - 開発用ページ: `/preview.html`（キャラ・表情・お菓子の一覧）、`/art.html`（掲載用の絵。`?kind=thumb` で 800×515、`?kind=og` で 1200×630）。本番ビルドには含まれません。
-- 開発サーバーでは `?dev=select|howto|settings|records|pause|play|result` で各画面へ直接飛べます（`&char=elfin` キャラ、`&t=40` 経過秒、`&fever` フィーバー中、`&cry=2` スピキが泣いている、`&bot` ボットが操作）。コンソールから `app` で状態を触れます（本番ビルドでは無効）。
+- 開発サーバーでは `?dev=select|howto|settings|records|pause|play|result` で各画面へ直接飛べます（`&char=elfin` キャラ、`&course=daily|night` コース、`&t=40` 経過秒、`&fever` フィーバー中、`&cry=2` スピキが泣いている、`&bot` ボットが操作）。コンソールから `app` で状態を触れます（本番ビルドでは無効）。
 - 絵はすべて Canvas 2D のコード描画（ほっぺの変形だけ WebGL2。使えない環境では変形なしで描画）、音はすべて WebAudio の合成です（素材ファイルなし）。
-- ゲームの数値は `src/config/balance.ts` と `src/config/characters.ts` に集めてあります。
+- ゲームの数値は `src/config/balance.ts` と `src/config/characters.ts`、コースのルールは `src/config/rules.ts`、おねがいは `src/config/missions.ts` に集めてあります。
 
 ## sabanogames への組み込み
 

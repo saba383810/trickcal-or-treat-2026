@@ -30,7 +30,7 @@ function rx(r: Rng, lo = 0.1, hi = 0.9): number {
 
 /** ふつうのお菓子（キャンディかスター。後半ほどスターが増える） */
 function sweet(w: World): ItemKind {
-  const star = 0.2 + 0.12 * w.progress + (w.spurt ? 0.12 : 0);
+  const star = 0.2 + 0.12 * w.progress + (w.spurt ? 0.12 : 0) + (w.rule.star ?? 0);
   return w.rng.next() < star ? 'star' : 'candy';
 }
 
@@ -149,6 +149,9 @@ const PATTERNS: Pattern[] = [
   },
 ];
 
+/** ホバギが出るパターン */
+const HOBAGI_PATTERNS = new Set(['trap', 'hobagiRain', 'lone']);
+
 /** n 個の x を、互いに min 以上離して選ぶ */
 function spread(r: Rng, n: number, min: number): number[] {
   for (let tries = 0; tries < 30; tries++) {
@@ -164,6 +167,9 @@ function spread(r: Rng, n: number, min: number): number[] {
 export function normalPattern(w: World, t: number, push: Push): number {
   const u = w.progress;
   const weights = PATTERNS.map((p) => p.weight(u, w));
+  // ホバギの多い・少ないコース
+  const hobagi = w.rule.hobagi ?? 1;
+  if (hobagi !== 1) PATTERNS.forEach((p, i) => HOBAGI_PATTERNS.has(p.name) && (weights[i] *= hobagi));
   // ラストスパートはホバギ少なめ・お菓子多め
   if (w.spurt) PATTERNS.forEach((p, i) => (weights[i] *= p.name === 'stream' || p.name === 'zigzag' || p.name === 'scatter' ? 1.5 : p.name === 'hobagiRain' ? 0.6 : 1));
   const p = PATTERNS[w.rng.weighted(weights)];
