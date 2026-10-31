@@ -2,10 +2,11 @@
 import { CHAR_SPECS, SPIKI } from '../view/draw/characters';
 import { FEET_R, CROUCH_FEET_R, drawChibi, type Expr } from '../view/draw/chibi';
 import { drawItem } from '../view/draw/items';
+import { drawLogo } from '../view/draw/logo';
 import { cobweb, drawScene, garland, ghost } from '../view/draw/scene';
-import { bubble, outlined } from '../view/draw/ui';
+import { bubble } from '../view/draw/ui';
 import type { Layout } from '../view/layout';
-import { C, font, popFont } from '../view/palette';
+import { C, font } from '../view/palette';
 
 const og = new URLSearchParams(location.search).get('kind') !== 'thumb';
 const W = og ? 1200 : 800;
@@ -25,7 +26,7 @@ const ART = og
       charR: 50,
       charX: [204, 372, 540, 708, 876],
       spiki: { x: W - 105, y: H * 0.5, r: 50 },
-      title: { x: W * 0.45, pill: 26, l1: [124, 84], l2: [222, 104] },
+      title: { x: W * 0.45, pill: 22, top: 62, s: 82 },
       items: [
         ['candy', 90, 120, 30],
         ['star', 250, 210, 34],
@@ -33,17 +34,16 @@ const ART = og
         ['mokaron', 1090, 110, 34],
         ['candy', 870, 70, 28],
         ['star', 380, 60, 26],
-        ['hobagi', 590, 300, 38],
         ['candy', 1135, 560, 24],
       ] as [Kind, number, number, number][],
       floor: [] as [Kind, number, number, number][],
     }
   : {
-      ground: 392,
-      charR: 46,
+      ground: 426,
+      charR: 42,
       charX: [78, 190, 302, 414, 526],
       spiki: { x: 700, y: 236, r: 36 },
-      title: { x: 336, pill: 12, l1: [76, 52], l2: [134, 64] },
+      title: { x: 336, pill: 8, top: 42, s: 56 },
       items: [
         ['candy', 36, 92, 20],
         ['star', 640, 40, 22],
@@ -51,11 +51,11 @@ const ART = og
         ['shucaron', 612, 128, 22],
       ] as [Kind, number, number, number][],
       floor: [
-        ['candy', 90, 452, 24],
-        ['star', 230, 456, 26],
-        ['mokaron', 380, 452, 28],
-        ['shucaron', 530, 452, 28],
-        ['candy', 670, 456, 24],
+        ['candy', 90, 474, 22],
+        ['star', 230, 478, 24],
+        ['mokaron', 380, 474, 26],
+        ['shucaron', 530, 474, 26],
+        ['candy', 670, 478, 22],
       ] as [Kind, number, number, number][],
     };
 
@@ -77,14 +77,7 @@ const L: Layout = {
   pauseBtn: { x: 0, y: 0, w: 0, h: 0 },
 };
 
-void Promise.all([document.fonts.load(popFont(80), 'ホバギ・オア・トリート！'), document.fonts.load(font(20), 'トリッカル非公式ファンゲーム')]).then(draw);
-
-/** ロゴの文字（下にずらした影 → ふち → 色） */
-function logoText(text: string, x: number, y: number, size: number, fill: string): void {
-  const opts = { size, font: popFont(size), stroke: C.ink, width: size * 0.2 };
-  outlined(c, text, x, y + size * 0.08, { ...opts, fill: '#2a1a40', stroke: '#2a1a40' });
-  outlined(c, text, x, y, { ...opts, fill });
-}
+void Promise.all([document.fonts.load(font(80), 'ホバギ・オア・トリート！'), document.fonts.load(font(20), 'トリッカル非公式ファンゲーム')]).then(draw);
 
 function draw(): void {
   // 上のふちの飾りは、タイトルの後ろにかける
@@ -129,27 +122,8 @@ function draw(): void {
   c.textAlign = 'center';
   c.textBaseline = 'middle';
   c.fillText(pill, tx, py + 19 * k);
-  c.translate(tx, 0);
-  c.rotate(-0.05);
-  // ホバギ（かぼちゃ色）・オア・（おばけ緑）／トリート！（むらさき）。タイトル画面のロゴと同じ
-  const [y1, s1] = ART.title.l1;
-  const [y2, s2] = ART.title.l2;
-  const so = s1 * 0.56;
-  c.font = popFont(s1);
-  const wh = c.measureText('ホバギ').width;
-  c.font = popFont(so);
-  const wo = c.measureText('・オア・').width;
-  let x = -(s1 + wh + wo) / 2;
-  c.save();
-  c.translate(x + s1 / 2, y1 + 6 * k);
-  c.rotate(-0.2);
-  drawItem(c, 'hobagi', 0, 0, s1 * 0.46, { t: 0, phase: 0, id: 0 });
   c.restore();
-  x += s1;
-  logoText('ホバギ', x + wh / 2, y1, s1, '#ff9a3d');
-  logoText('・オア・', x + wh + wo / 2, y1 + s1 * 0.04, so, '#c6ef8c');
-  logoText('トリート！', 0, y2, s2, '#dcc4ff');
-  c.restore();
+  drawLogo(c, tx, ART.title.top, ART.title.s);
   // ?kind=… を headless の --dump-dom で取り出せるよう、PNG を本文に書き出す
   const out = document.createElement('pre');
   out.id = 'png';

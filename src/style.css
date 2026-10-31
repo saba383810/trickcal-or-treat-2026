@@ -295,56 +295,14 @@ canvas.pic {
 }
 
 .logo h1 {
-  display: flex;
-  flex-direction: column;
-  margin: 6px 0 0;
-  font-family: var(--pop);
-  font-weight: 400;
-  line-height: 1.02;
-  letter-spacing: 0.02em;
-  transform: rotate(-3deg);
+  margin: 4px 0 0;
+  line-height: 0;
 }
 
-.logo h1 > span {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.logo h1 span {
-  color: #fff;
-  -webkit-text-stroke: 10px var(--ink);
-  paint-order: stroke fill;
-  text-shadow: 0 6px 0 var(--frame-deep);
-}
-
-/* ホバギ（かぼちゃ色）・オア・（おばけ緑）トリート！（むらさき） */
-.logo .l1 {
-  font-size: clamp(46px, min(12.5vw, 9svh), 74px);
-}
-
-.logo .w-hobagi {
-  color: #ff9a3d;
-}
-
-.logo .w-or {
-  font-size: 0.56em;
-  color: #c6ef8c;
-  -webkit-text-stroke-width: 8px;
-}
-
-.logo .l2 {
-  font-size: clamp(50px, min(13.5vw, 10svh), 82px);
-  letter-spacing: -0.02em;
-  color: #dcc4ff;
-}
-
-.logo h1 .item {
-  width: 1em !important;
-  height: 1em !important;
-  margin-right: 0.04em;
-  transform: rotate(-12deg);
-  filter: drop-shadow(0 5px 0 var(--frame-deep));
+/* ロゴの絵（src/view/draw/logo.ts）。幅は画面の幅と高さの小さいほうに合わせる */
+.logo-art {
+  width: min(84vw, 400px, 40svh) !important;
+  height: auto !important;
 }
 
 .title-stage {

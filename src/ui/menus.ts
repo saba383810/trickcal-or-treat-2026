@@ -10,8 +10,9 @@ import type { World } from '../sim/world';
 import type { CheekWho, SaveData } from '../storage';
 import { CHAR_SPECS, SPIKEY, SPIKI } from '../view/draw/characters';
 import type { ChibiSpec, Expr } from '../view/draw/chibi';
-import { C } from '../view/palette';
-import { h, itemCanvas, mochiChibi, starsText } from './dom';
+import { LOGO_H, LOGO_W, drawLogo } from '../view/draw/logo';
+import { C, font } from '../view/palette';
+import { h, itemCanvas, mochiChibi, paintCanvas, starsText } from './dom';
 
 export interface MenuHost {
   save: SaveData;
@@ -130,12 +131,7 @@ export function titleScreen(
       'div',
       { class: 'logo' },
       h('span', { class: 'logo-sub' }, 'トリッカル 非公式ファンゲーム'),
-      h(
-        'h1',
-        { 'aria-label': GAME_TITLE },
-        h('span', { class: 'l1' }, itemCanvas('hobagi', 64), h('span', { class: 'w-hobagi' }, 'ホバギ'), h('span', { class: 'w-or' }, '・オア・')),
-        h('span', { class: 'l2' }, 'トリート！'),
-      ),
+      h('h1', { 'aria-label': GAME_TITLE }, logoArt()),
     ),
     h('div', { class: 'title-stage' }, row),
     h(
@@ -162,6 +158,15 @@ export function titleScreen(
     ),
     h('p', { class: 'disclaimer' }, DISCLAIMER),
   );
+}
+
+/** ロゴの絵。字の形はフォントで描くので、フォントが届いたら描き直す */
+function logoArt(): HTMLCanvasElement {
+  const S = 64;
+  const make = () => paintCanvas(LOGO_W * S, LOGO_H * S, (c) => drawLogo(c, (LOGO_W * S) / 2, 0, S), 'logo-art');
+  const cv = make();
+  if (!document.fonts.check(font(S), GAME_TITLE)) void document.fonts.load(font(S), GAME_TITLE).then(() => cv.replaceWith(make()));
+  return cv;
 }
 
 /** まだ取っていない称号のうち、いちばん近いもの */
