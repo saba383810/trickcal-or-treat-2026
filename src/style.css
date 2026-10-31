@@ -226,6 +226,12 @@ p {
   box-shadow: 0 3px 0 var(--line-ink);
 }
 
+.btn.danger {
+  color: #fff;
+  text-shadow: 0 2px 0 #9e2a3a;
+  background: linear-gradient(#f2788a, #e04b62 55%, #b8344a);
+}
+
 .btn.share {
   color: #fff;
   background: #222;
@@ -788,6 +794,24 @@ canvas.pic {
   width: 22px;
   height: 22px;
   accent-color: var(--orange);
+}
+
+/* せっていの「データを消す」。ほかの設定と線で分けて、押してから確かめる */
+.danger-zone {
+  margin-top: 16px;
+  padding-top: 14px;
+  text-align: center;
+  border-top: 2px dashed #d9cce8;
+}
+
+.danger-note {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #b8344a;
+  /* 日本語も 分かち書きの空白で折り返す（「のこ/ります」のように切らない） */
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 .pause {

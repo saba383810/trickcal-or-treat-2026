@@ -107,6 +107,12 @@ export function loadSave(): SaveData {
   }
 }
 
+/** データを消す（せってい から）: 遊んだ記録を ぜんぶ はじめにもどす。音・画面のゆれ・言語の設定は残す */
+export function clearedSave(old: SaveData): SaveData {
+  const { sfxVolume, bgmVolume, muted, calm, lang } = old;
+  return { ...defaults(), sfxVolume, bgmVolume, muted, calm, lang };
+}
+
 export function writeSave(data: SaveData): void {
   try {
     window.localStorage.setItem(KEY, JSON.stringify(data));

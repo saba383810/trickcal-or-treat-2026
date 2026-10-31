@@ -369,6 +369,10 @@ export const ko: Strings = {
     bgm: 'BGM',
     mute: '음소거',
     calm: '화면 흔들림 줄이기',
+    clear: '데이터 삭제',
+    clearNote: '기록・미션・대사 도감・칭호가 모두 지워지고, 되돌릴 수 없어요. (설정은 남아요)',
+    clearYes: '삭제',
+    clearNo: '취소',
   },
 
   pause: {

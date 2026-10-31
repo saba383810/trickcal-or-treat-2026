@@ -8,7 +8,7 @@ import { dailySeed, dayKey, dayLabel, nightOpen, ruleOf, ruleText, type CourseId
 import { detectLang, isLang, setLang, T, type Lang } from './i18n';
 import { World } from './sim/world';
 import { Tutorial } from './tutorial';
-import { loadSave, writeSave, type CheekWho, type SaveData } from './storage';
+import { clearedSave, loadSave, writeSave, type CheekWho, type SaveData } from './storage';
 import { capture, cheekHooks, h } from './ui/dom';
 import { charSelect, howToPanel, langButton, linesPanel, missionsPanel, pausePanel, recordsPanel, resultPanel, settingsPanel, titleScreen, type MenuHost } from './ui/menus';
 import { SceneCache, drawLiveDecor } from './view/draw/scene';
@@ -129,7 +129,7 @@ export class App implements MenuHost {
         howTo: () => this.showHowTo(() => this.goTitle(), () => this.startTutorial(this.save.lastChar, 'normal')),
         records: () => this.showRecords(),
         missions: () => this.show(missionsPanel(this, { close: () => this.goTitle() })),
-        settings: () => this.show(settingsPanel(this, { close: () => this.goTitle() })),
+        settings: () => this.showSettings(),
       }),
       langButton(this, (l) => this.changeLang(l)),
     );
@@ -138,6 +138,19 @@ export class App implements MenuHost {
   private goSelect(): void {
     this.toMenu();
     this.show(charSelect(this, { pick: (id, course) => this.start(id, course), back: () => this.goTitle() }));
+  }
+
+  private showSettings(): void {
+    this.show(settingsPanel(this, { close: () => this.goTitle(), clear: () => this.clearData() }));
+  }
+
+  /** データを消して、タイトルへ（同じ save のまま中身を入れかえる。次のスタートは れんしゅうから） */
+  private clearData(): void {
+    Object.assign(this.save, clearedSave(this.save));
+    this.charId = this.save.lastChar;
+    this.course = this.save.lastCourse;
+    this.persist();
+    this.goTitle();
   }
 
   private showRecords(): void {
@@ -318,7 +331,7 @@ export class App implements MenuHost {
     if (course) this.save.lastCourse = this.course = course;
     if (dev === 'select') return this.goSelect();
     if (dev === 'howto') return this.showHowTo(() => this.goTitle());
-    if (dev === 'settings') return this.show(settingsPanel(this, { close: () => this.goTitle() }));
+    if (dev === 'settings') return this.showSettings();
     if (dev === 'records') return this.showRecords();
     if (dev === 'lines') return this.show(linesPanel(this, { close: () => this.showRecords() }));
     if (dev === 'missions') return this.show(missionsPanel(this, { close: () => this.goTitle() }));

@@ -418,6 +418,10 @@ export const ja = {
     bgm: 'BGM',
     mute: '音を消す',
     calm: '画面のゆれを へらす',
+    clear: 'データを消す',
+    clearNote: 'きろく・ミッション・セリフずかん・称号が ぜんぶ消えて、もとには もどせません。（せっていは のこります）',
+    clearYes: '消す',
+    clearNo: 'やめる',
   },
 
   pause: {

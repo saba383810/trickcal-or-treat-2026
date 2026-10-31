@@ -549,7 +549,7 @@ export function howToPanel(host: MenuHost, on: { close: () => void; practice?: (
 
 // ===================================================================== せってい
 
-export function settingsPanel(host: MenuHost, on: { close: () => void }): HTMLElement {
+export function settingsPanel(host: MenuHost, on: { close: () => void; clear: () => void }): HTMLElement {
   const s = host.sound;
   const save = host.save;
   const slider = (label: string, value: number, set: (v: number) => void) => {
@@ -575,6 +575,15 @@ export function settingsPanel(host: MenuHost, on: { close: () => void }): HTMLEl
     });
     return h('label', { class: 'setting check' }, input, h('span', {}, label));
   };
+  // データを消す。押すと、確かめる文とボタンに変わる（すぐには消さない）
+  const danger = h('div', { class: 'danger-zone' });
+  const idle = () => danger.replaceChildren(btn(T.settings.clear, ask, s, 'ghost'));
+  const ask = () =>
+    danger.replaceChildren(
+      h('p', { class: 'danger-note' }, T.settings.clearNote),
+      h('div', { class: 'row small' }, btn(T.settings.clearNo, idle, s), btn(T.settings.clearYes, on.clear, s, 'danger')),
+    );
+  idle();
   return h(
     'div',
     { class: 'panel settings' },
@@ -583,6 +592,7 @@ export function settingsPanel(host: MenuHost, on: { close: () => void }): HTMLEl
     slider(T.settings.bgm, save.bgmVolume, (v) => (save.bgmVolume = s.bgmVolume = v)),
     check(T.settings.mute, save.muted, (v) => (save.muted = s.muted = v)),
     check(T.settings.calm, save.calm, (v) => (save.calm = v)),
+    danger,
     h('div', { class: 'row' }, btn(T.common.close, on.close, s, 'primary')),
   );
 }

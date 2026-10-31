@@ -374,6 +374,10 @@ export const en: Strings = {
     bgm: 'Music',
     mute: 'Mute',
     calm: 'Reduce screen shake',
+    clear: 'Delete data',
+    clearNote: "Your records, missions, quote book and titles will all be erased. This can't be undone. (Your settings stay.)",
+    clearYes: 'Delete',
+    clearNo: 'Cancel',
   },
 
   pause: {
