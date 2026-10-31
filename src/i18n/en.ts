@@ -160,7 +160,7 @@ export const en: Strings = {
       noHit: 'Score 3,000 without a pumpkin hit',
       joanneDrain: 'Drain 3 pumpkins as Joanne',
       comfortLv3: 'Let Speaki cry 3 times, then comfort her',
-      cheekSulk: 'Pull cheeks nonstop (5 in a row)',
+      cheekSulk: 'Pull cheeks nonstop (3 in a row)',
       chain80: 'Get an 80 combo',
       feverScore: 'Score 3,000 during Fever',
       daily3: 'Play “Tonight\'s Treats” on 3 days',

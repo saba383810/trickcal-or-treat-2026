@@ -156,7 +156,7 @@ export const ko: Strings = {
       noHit: '호박이에 한 번도 안 맞고 3,000점',
       joanneDrain: '죠안으로 호박이 3개 빨아들이기',
       comfortLv3: '스핔이가 3번 운 뒤에 달래기',
-      cheekSulk: '볼을 끈질기게 잡아당기기 (연속 5번)',
+      cheekSulk: '볼을 끈질기게 잡아당기기 (연속 3번)',
       chain80: '연속 80',
       feverScore: '피버 중에 3,000점',
       daily3: '“오늘 밤 간식” 3일 플레이하기',

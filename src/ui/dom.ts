@@ -154,7 +154,7 @@ export const cheekHooks: { pulled?: (who: CheekWho | undefined, k: number, sulk:
 /** これだけ伸ばしたら 1 回と数える */
 const PULL_MIN = 0.3;
 /** 短い間にこれだけ引っぱると、ひとこと言われる（たいていは すねる） */
-const SULK_PULLS = 5;
+const SULK_PULLS = 3;
 const SULK_WINDOW = 6000;
 const SULK_MS = 2200;
 
