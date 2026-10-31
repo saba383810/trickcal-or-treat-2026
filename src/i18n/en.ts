@@ -344,8 +344,9 @@ export const en: Strings = {
 
   linesBook: {
     heading: 'Quote book',
-    note: (n: number, all: number) => `Quotes found: ${n} / ${all}. What they say depends on how your round went.`,
+    note: (n: number, all: number) => `Quotes found: ${n} / ${all}. What they say depends on how your round went, or how you pull their cheeks.`,
     unknown: '???',
+    pinchHint: 'Keep pulling their cheeks',
   },
 
   howTo: {

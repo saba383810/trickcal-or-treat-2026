@@ -389,8 +389,10 @@ export const ja = {
   /** セリフずかん */
   linesBook: {
     heading: 'セリフずかん',
-    note: (n: number, all: number) => `見つけた セリフ ${n} / ${all}。あそび終わった時の ようすで、ひとことが かわります`,
+    note: (n: number, all: number) => `見つけた セリフ ${n} / ${all}。あそび終わった時の ようすや、ほっぺの 引っぱりかたで、ひとことが かわります`,
     unknown: '？？？',
+    /** ほっぺの ひとことの 見つけかた */
+    pinchHint: 'ほっぺを しつこく 引っぱる',
   },
 
   howTo: {

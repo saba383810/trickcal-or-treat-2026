@@ -152,10 +152,25 @@ export function judgeMissions(save: SaveData, p: Play): Mission[] {
     }
     if (v >= m.goal) cleared.push(m);
   }
+  clear(save, cleared);
+  return cleared;
+}
+
+/**
+ * 記録で数えるミッション（ほっぺ・セリフずかん など）を、遊んでいない時に判定する。
+ * タイトルやキャラえらびで ほっぺを引っぱった時に、ゲームを終えるのを待たずにクリアにする
+ */
+export function judgeRecords(save: SaveData): Mission[] {
+  const cleared = activeMissions(save).filter((m) => m.total && m.total(save) >= m.goal);
+  clear(save, cleared);
+  return cleared;
+}
+
+/** クリアしたミッションを save に書きこむ（ごほうびのおかしも足す） */
+function clear(save: SaveData, cleared: Mission[]): void {
   for (const m of cleared) {
     save.missions.push(m.id);
     save.sweets += m.reward;
     delete save.missionBest[m.id];
   }
-  return cleared;
 }

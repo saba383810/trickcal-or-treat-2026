@@ -148,8 +148,8 @@ export function chibiCanvas(spec: ChibiSpec, expr: Expr, size: number, opts: { b
  * ほっぺを引っぱれるキャラ。chibiCanvas と同じ大きさで並び、つまんでいる間と揺れている間だけ、
  * 絵を隠して上に重ねた大きめの canvas へ変形した絵を描く（伸びた分は枠の外へはみ出す）
  */
-/** ほっぺを引っぱって離した時に呼ぶ（記録する。app がつなぐ）。k = 伸ばした量 0〜1、sulk = しつこく引っぱって ひとこと言われた */
-export const cheekHooks: { pulled?: (who: CheekWho | undefined, k: number, sulk: boolean) => void } = {};
+/** ほっぺを引っぱって離した時に呼ぶ（記録する。app がつなぐ）。k = 伸ばした量 0〜1、line = しつこく引っぱって言われた ひとこと（セリフずかんの名前） */
+export const cheekHooks: { pulled?: (who: CheekWho | undefined, k: number, line?: string) => void } = {};
 
 /** これだけ伸ばしたら 1 回と数える */
 const PULL_MIN = 0.3;
@@ -163,7 +163,7 @@ export function mochiChibi(
   spec: ChibiSpec,
   expr: Expr,
   size: number,
-  opts: { body?: boolean; flip?: boolean; sound?: Sound; who?: CheekWho; onGrab?: () => void } = {},
+  opts: { body?: boolean; flip?: boolean; sound?: Sound; who?: CheekWho; onGrab?: () => void; onTalk?: (text: string, ms: number) => void } = {},
 ): HTMLElement {
   const body = opts.body !== false;
   const base = chibiCanvas(spec, expr, size, opts);
@@ -240,6 +240,8 @@ export function mochiChibi(
   const sulking = () => performance.now() < sulkUntil;
   const recent: number[] = [];
   const talk = (text: string) => {
+    // 吹き出しを ほかの所に出したい時（キャラえらびのカードは、吹き出しが となりのカードにかぶる）
+    if (opts.onTalk) return opts.onTalk(text, SULK_MS);
     wrap.querySelector('.mochi-talk')?.remove();
     const el = h('span', { class: 'mochi-talk' }, text);
     wrap.append(el);
@@ -260,14 +262,16 @@ export function mochiChibi(
     while (recent.length && now - recent[0] > SULK_WINDOW) recent.shift();
     recent.push(now);
     const sulk = !!opts.who && recent.length >= SULK_PULLS && !sulking();
+    let line: string | undefined;
     if (sulk) {
       recent.length = 0;
       sulkUntil = now + SULK_MS;
       const re = pinchReaction(opts.who!);
       sulkExpr = re.expr;
+      line = re.key;
       talk(re.text);
     }
-    cheekHooks.pulled?.(opts.who, k, sulk);
+    cheekHooks.pulled?.(opts.who, k, line);
   };
   // ボタンの中のキャラ（モード選択）は、引っぱったあとに離してもボタンを押したことにしない
   let start: { x: number; y: number } | null = null;

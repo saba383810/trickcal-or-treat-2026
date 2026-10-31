@@ -340,8 +340,9 @@ export const ko: Strings = {
 
   linesBook: {
     heading: '대사 도감',
-    note: (n: number, all: number) => `찾은 대사 ${n} / ${all}. 플레이가 끝났을 때의 상황에 따라 한마디가 달라져요`,
+    note: (n: number, all: number) => `찾은 대사 ${n} / ${all}. 플레이가 끝났을 때의 상황이나 볼을 잡아당기는 방법에 따라 한마디가 달라져요`,
     unknown: '???',
+    pinchHint: '볼을 끈질기게 잡아당기기',
   },
 
   howTo: {

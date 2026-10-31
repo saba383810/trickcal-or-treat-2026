@@ -578,6 +578,13 @@ canvas.pic {
   color: var(--ink-soft);
 }
 
+/* ほっぺを しつこく引っぱった時のひとこと（しばらくして いつものセリフにもどる） */
+.hello.pinch {
+  font-weight: 800;
+  color: var(--ink);
+  animation: talk-in 0.2s ease-out;
+}
+
 .stat-rows {
   display: flex;
   flex-direction: column;
@@ -1236,6 +1243,43 @@ canvas.pic {
 .mission.got {
   background: #fff6dc;
   border-color: var(--gold);
+}
+
+/* ゲームの外でクリアしたミッションのお知らせ（タイトルで ほっぺを引っぱった時など） */
+.menu-toasts {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  left: 50%;
+  z-index: 5;
+  display: grid;
+  gap: 6px;
+  width: min(360px, calc(100% - 32px));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.menu-toasts .mission {
+  box-shadow: 0 3px 0 var(--gold);
+  animation: menu-toast 3.2s ease-out forwards;
+}
+
+@keyframes menu-toast {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  8%,
+  85% {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
 }
 
 .mission.done .m-prog,

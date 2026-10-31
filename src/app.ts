@@ -3,14 +3,28 @@ import { Sound } from './audio/sound';
 import { rankOf, RANKS, type RankId } from './config/balance';
 import type { CharId } from './config/characters';
 import { pickResultLine } from './config/lines';
-import { activeMissions, fits, judgeMissions, missionText, playValue, type Mission, type Play } from './config/missions';
+import { activeMissions, fits, judgeMissions, judgeRecords, missionText, playValue, type Mission, type Play } from './config/missions';
 import { dailySeed, dayKey, dayLabel, nightOpen, ruleOf, ruleText, type CourseId } from './config/rules';
 import { detectLang, isLang, setLang, T, type Lang } from './i18n';
 import { World } from './sim/world';
 import { Tutorial } from './tutorial';
 import { clearedSave, loadSave, writeSave, type CheekWho, type SaveData } from './storage';
 import { capture, cheekHooks, h } from './ui/dom';
-import { charSelect, howToPanel, langButton, linesPanel, missionsPanel, pausePanel, recordsPanel, resultPanel, settingsPanel, titleScreen, type MenuHost } from './ui/menus';
+import {
+  charSelect,
+  howToPanel,
+  langButton,
+  linesPanel,
+  missionToast,
+  missionsPanel,
+  pausePanel,
+  recordsPanel,
+  refreshTitle,
+  resultPanel,
+  settingsPanel,
+  titleScreen,
+  type MenuHost,
+} from './ui/menus';
 import { SceneCache, drawLiveDecor } from './view/draw/scene';
 import { outlined } from './view/draw/ui';
 import { GameView } from './view/gameView';
@@ -61,7 +75,7 @@ export class App implements MenuHost {
     this.sound.muted = this.save.muted;
     setLang(isLang(this.save.lang) ? this.save.lang : detectLang());
     this.bindInput(canvas);
-    cheekHooks.pulled = (who, k, sulk) => this.cheek(who, k, sulk);
+    cheekHooks.pulled = (who, k, line) => this.cheek(who, k, line);
     this.loadFonts();
     this.goTitle();
     requestAnimationFrame((t) => {
@@ -91,13 +105,31 @@ export class App implements MenuHost {
   }
 
   /** ほっぺを引っぱった記録（タイトル・キャラえらび・ゲーム中のスピキ など、どこでも） */
-  private cheek(who: CheekWho | undefined, k: number, sulk: boolean): void {
+  private cheek(who: CheekWho | undefined, k: number, line?: string): void {
     const c = this.save.cheek;
     c.pulls++;
     if (k >= 0.9) c.big++;
-    if (sulk) c.sulks++;
+    // しつこく引っぱって言われた ひとことは、セリフずかんに残す
+    if (line) {
+      c.sulks++;
+      if (!this.save.lines.includes(line)) this.save.lines.push(line);
+    }
     if (who) c.by[who] = (c.by[who] ?? 0) + 1;
     this.persist();
+    // ゲームの外なら、ほっぺ・セリフのミッションをその場で判定する（遊んでいる途中は、終わった時にまとめて）
+    if (this.mode === 'menu' || this.mode === 'result') {
+      this.checkRecords();
+      refreshTitle(this);
+    }
+  }
+
+  /** 記録で数えるミッションをその場で判定して、クリアしたら画面の上でお知らせする（クリアしたら true） */
+  private checkRecords(): boolean {
+    const cleared = judgeRecords(this.save);
+    if (!cleared.length) return false;
+    this.persist();
+    for (const m of cleared) missionToast(this.save, m);
+    return true;
   }
 
   // ================================================================= 画面遷移
@@ -133,6 +165,8 @@ export class App implements MenuHost {
       }),
       langButton(this, (l) => this.changeLang(l)),
     );
+    // 前に引っぱった分で、もうクリアしているミッション（ゲームを終えるまで判定していなかったころの記録）
+    if (this.checkRecords()) refreshTitle(this);
   }
 
   private goSelect(): void {
@@ -174,7 +208,7 @@ export class App implements MenuHost {
     this.toasted.clear();
     const view = new GameView(world, id, this.screen, this.sound, this.bgm, this.scene);
     view.onPause = () => this.pause();
-    view.onCheek = (k) => this.cheek('spiki', k, false);
+    view.onCheek = (k) => this.cheek('spiki', k);
     view.hintComfort = this.save.comforts < 3;
     view.hintMove = this.save.plays < 3;
     view.fx.reduced = this.save.calm;
@@ -196,7 +230,7 @@ export class App implements MenuHost {
     const view = new GameView(world, id, this.screen, this.sound, this.bgm, this.scene);
     const tutorial = new Tutorial(world, () => view.touchUI);
     view.onPause = () => this.pause();
-    view.onCheek = (k) => this.cheek('spiki', k, false);
+    view.onCheek = (k) => this.cheek('spiki', k);
     view.hintComfort = false;
     view.hintMove = false;
     view.fx.reduced = this.save.calm;

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MISSIONS, MISSION_SLOTS, activeMissions, judgeMissions, type Play } from '../src/config/missions';
+import { MISSIONS, MISSION_SLOTS, activeMissions, judgeMissions, judgeRecords, type Play } from '../src/config/missions';
 import { DAILY_RULES, NIGHT, dailyRule, dailySeed, nightOpen } from '../src/config/rules';
 import { World, type Stats } from '../src/sim/world';
 import { loadSave, type SaveData } from '../src/storage';
@@ -121,5 +121,23 @@ describe('ミッション', () => {
     save.charPlays.butter = 1;
     judgeMissions(save, play());
     expect(save.missions).toContain('chars2');
+  });
+
+  it('ほっぺのミッションは、遊び終わるのを待たずに その場で判定できる（タイトルで引っぱった時）', () => {
+    const i = MISSIONS.findIndex((m) => m.id === 'cheek10');
+    save.missions = MISSIONS.slice(0, i).map((m) => m.id);
+    save.cheek.pulls = 9;
+    expect(judgeRecords(save)).toEqual([]);
+    save.cheek.pulls = 10;
+    const before = save.sweets;
+    expect(judgeRecords(save).map((m) => m.id)).toEqual(['cheek10']);
+    expect(save.sweets - before).toBe(20);
+    expect(activeMissions(save).map((m) => m.id)).not.toContain('cheek10');
+  });
+
+  it('遊んで数えるミッションは、その場の判定ではクリアしない', () => {
+    expect(activeMissions(save)[0].play).toBeDefined();
+    expect(judgeRecords(save)).toEqual([]);
+    expect(save.missions).toEqual([]);
   });
 });

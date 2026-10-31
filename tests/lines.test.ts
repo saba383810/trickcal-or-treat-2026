@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CHAR_ORDER } from '../src/config/characters';
-import { RESULT_LINE_IDS, lineKey, pickResultLine, pinchReaction, resultHint, resultText, talkLine } from '../src/config/lines';
+import { BOOK_ORDER, RESULT_LINE_IDS, bookLines, lineKey, pickResultLine, pinchKey, pinchReaction, resultHint, resultText, talkLine } from '../src/config/lines';
 import type { Play } from '../src/config/missions';
 import { ja } from '../src/i18n/ja';
 import type { Stats } from '../src/sim/world';
@@ -102,5 +102,25 @@ describe('原作の口調', () => {
     for (const id of CHAR_ORDER)
       for (const k of ['fever', 'spurt', 'chain', 'hit', 'skill'] as const)
         for (const r of [0, 0.99]) expect((talkLine(id, k, undefined, () => r) ?? '').length).toBeLessThanOrEqual(18);
+  });
+});
+
+describe('セリフずかん', () => {
+  it('結果のセリフに加えて、ほっぺのひとことも入る（スピキは ほっぺだけ）', () => {
+    for (const id of CHAR_ORDER) {
+      const keys = bookLines(id).map((l) => l.key);
+      expect(keys).toEqual(expect.arrayContaining(RESULT_LINE_IDS.map((l) => lineKey(id, l))));
+      expect(keys).toEqual(expect.arrayContaining(ja.lines.pinch[id].map((_, i) => pinchKey(id, i))));
+    }
+    expect(bookLines('spiki').map((l) => l.key)).toEqual(ja.lines.pinch.spiki.map((_, i) => pinchKey('spiki', i)));
+  });
+
+  it('引っぱった時に残す名前が、ずかんの名前と同じで、重ならない', () => {
+    for (const who of BOOK_ORDER) {
+      const keys = bookLines(who).map((l) => l.key);
+      for (const r of [0, 0.5, 0.99]) expect(keys).toContain(pinchReaction(who, () => r).key);
+    }
+    const all = BOOK_ORDER.flatMap((w) => bookLines(w).map((l) => l.key));
+    expect(new Set(all).size).toBe(all.length);
   });
 });

@@ -3,7 +3,7 @@ import type { Sound } from '../audio/sound';
 import { BALANCE, RANKS, TITLES, rankOf, titleOf, type ItemKind, type RankId } from '../config/balance';
 import { CHARACTERS, CHAR_ORDER, type CharId } from '../config/characters';
 import { MISSIONS, MISSION_SLOTS, activeMissions, fits, missionText, playValue, progressOf, type Mission, type Play } from '../config/missions';
-import { RESULT_LINE_IDS, lineKey, resultHint, resultText, type PickedLine } from '../config/lines';
+import { BOOK_ORDER, bookLines, type PickedLine } from '../config/lines';
 import { dailyRule, dayKey, dayLabel, nightOpen, ruleOf, ruleText, type CourseId } from '../config/rules';
 import { lang, LANGS, langName, num, T, type Lang } from '../i18n';
 import type { World } from '../sim/world';
@@ -71,13 +71,11 @@ function missionsHead(save: SaveData, more = ''): HTMLElement {
 
 /** いまのミッション（タイトル）。押すとミッション画面 */
 function missionCard(host: MenuHost, open: () => void): HTMLElement {
-  const save = host.save;
-  const list = activeMissions(save);
   const go = () => {
     host.sound.click();
     open();
   };
-  return h(
+  const card = h(
     'div',
     {
       class: 'missions link',
@@ -92,9 +90,26 @@ function missionCard(host: MenuHost, open: () => void): HTMLElement {
         go();
       },
     },
+  );
+  fillMissionCard(card, host.save);
+  return card;
+}
+
+function fillMissionCard(card: HTMLElement, save: SaveData): void {
+  const list = activeMissions(save);
+  card.replaceChildren(
     missionsHead(save, ' ›'),
     list.length ? h('ul', {}, ...list.map((m) => missionRow(m, save))) : h('p', { class: 'm-all' }, T.missions.allDone),
   );
+}
+
+/** ゲームの外でクリアしたミッション（ほっぺを引っぱった時など）を、画面の上でお知らせする。画面を切り替えても消えないように body に出す */
+export function missionToast(save: SaveData, m: Mission): void {
+  let box = document.querySelector<HTMLElement>('.menu-toasts');
+  if (!box) document.body.append((box = h('ul', { class: 'menu-toasts', role: 'status' })));
+  const row = missionRow(m, save, 'done');
+  row.addEventListener('animationend', () => row.remove());
+  box.append(row);
 }
 
 // ===================================================================== タイトル
@@ -144,9 +159,18 @@ export function titleScreen(
     if (k > 1) m.classList.add('lead');
     row.append(m);
   }
-  const total = host.save.sweets;
-  const t = titleOf(total);
-  const next = nextTitle(total);
+  const card = missionCard(host, on.missions);
+  // 称号は押すと「きろく」で一覧が見られる
+  const badge = h('button', {
+    class: 'badge',
+    type: 'button',
+    onclick: () => {
+      s.click();
+      on.records();
+    },
+  });
+  fillBadge(badge, host.save.sweets);
+  titleLive = { card, badge };
   return h(
     'div',
     { class: 'screen title' },
@@ -163,24 +187,30 @@ export function titleScreen(
       btn(T.title.play, on.start, s, 'primary big'),
       h('div', { class: 'row' }, btn(T.howTo.heading, on.howTo, s), btn(T.records.heading, on.records, s), btn(T.settings.heading, on.settings, s)),
     ),
-    missionCard(host, on.missions),
-    // 称号は押すと「きろく」で一覧が見られる
-    h(
-      'button',
-      {
-        class: 'badge',
-        type: 'button',
-        onclick: () => {
-          s.click();
-          on.records();
-        },
-      },
-      h('b', {}, t ? T.title.badge(T.titles[t]) : T.title.noBadge),
-      h('span', {}, T.title.sweets(num(total))),
-      next ? h('small', {}, T.title.toNext(num(next.min - total))) : null,
-    ),
+    card,
+    badge,
     h('p', { class: 'disclaimer' }, T.disclaimer),
   );
+}
+
+function fillBadge(badge: HTMLElement, total: number): void {
+  const t = titleOf(total);
+  const next = nextTitle(total);
+  badge.replaceChildren(
+    h('b', {}, t ? T.title.badge(T.titles[t]) : T.title.noBadge),
+    h('span', {}, T.title.sweets(num(total))),
+    ...(next ? [h('small', {}, T.title.toNext(num(next.min - total)))] : []),
+  );
+}
+
+/** タイトルのミッションと称号。ほっぺを引っぱると その場で数が進むので、中身だけ作り直す（画面ごと出し直すと、引っぱっている子も作り直しになる） */
+let titleLive: { card: HTMLElement; badge: HTMLElement } | null = null;
+
+/** タイトルが出ていたら、ミッションの数と称号を いまの記録で出し直す */
+export function refreshTitle(host: MenuHost): void {
+  if (!titleLive?.card.isConnected) return;
+  fillMissionCard(titleLive.card, host.save);
+  fillBadge(titleLive.badge, host.save.sweets);
 }
 
 /** ロゴの絵。字の形はフォントで描くので、フォントが届いたら描き直す（韓国語の字は Jua なので、いまの言語の字で待つ） */
@@ -225,17 +255,35 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId, course: Cour
   const cards = h('div', { class: 'cards' });
   const cardEls = new Map<CharId, HTMLElement>();
 
+  // ほっぺを しつこく引っぱった時のひとことは、吹き出しでなく 下のせつめいの セリフの所に出す（カードの上の吹き出しは となりのカードにかぶる）
+  const helloEls = new Map<CharId, HTMLElement>();
+  const helloTimers = new Map<CharId, number>();
+  const say = (id: CharId) => (text: string, ms: number) => {
+    const el = helloEls.get(id)!;
+    el.replaceChildren(T.common.quote(text));
+    el.classList.add('pinch');
+    window.clearTimeout(helloTimers.get(id));
+    helloTimers.set(
+      id,
+      window.setTimeout(() => {
+        el.replaceChildren(T.common.quote(T.chars[id].hello));
+        el.classList.remove('pinch');
+      }, ms),
+    );
+  };
   const detailOf = (id: CharId) => {
     const d = CHARACTERS[id];
     const tx = T.chars[id];
     const bestSlot = h('p', { class: 'best-line' });
     bestSlots.set(id, bestSlot);
+    const hello = h('p', { class: 'hello' }, T.common.quote(tx.hello));
+    helloEls.set(id, hello);
     return h(
       'div',
       { class: 'detail', style: `--c:${C[id]}` },
-      h('div', { class: 'detail-face' }, mochiChibi(CHAR_SPECS[id], 'happy', 30, { sound: s, who: id })),
+      h('div', { class: 'detail-face' }, mochiChibi(CHAR_SPECS[id], 'happy', 30, { sound: s, who: id, onTalk: say(id) })),
       h('div', { class: 'detail-name' }, h('small', {}, tx.costume), tx.name),
-      h('p', { class: 'hello' }, T.common.quote(tx.hello)),
+      hello,
       h(
         'div',
         { class: 'stat-rows' },
@@ -317,7 +365,7 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId, course: Cour
         },
       },
       // ほっぺをつまんでも、そのキャラをえらぶ
-      mochiChibi(CHAR_SPECS[id], 'normal', 30, { sound: s, who: id, onGrab: () => choose(id) }),
+      mochiChibi(CHAR_SPECS[id], 'normal', 30, { sound: s, who: id, onGrab: () => choose(id), onTalk: say(id) }),
       h('span', { class: 'card-name' }, h('small', {}, tx.costume), tx.name),
       badgeSlot,
     );
@@ -354,6 +402,8 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId, course: Cour
 
 // ===================================================================== きろく
 
+/** スピキの色（なみだの水色） */
+const SPIKI_COLOR = '#9fdcf5';
 const whoName = (who: CheekWho) => (who === 'spiki' ? T.spikiName : T.chars[who].name);
 
 export function recordsPanel(host: MenuHost, on: { close: () => void; lines: () => void }): HTMLElement {
@@ -432,14 +482,15 @@ export function recordsPanel(host: MenuHost, on: { close: () => void; lines: () 
     h('h3', { class: 'rec-sub' }, T.records.cheek),
     h('p', { class: 'rec-daily' }, h('small', {}, `${T.records.pulled} `), h('b', {}, T.common.times(num(cheek.pulls))), h('small', {}, T.records.cheekMore(num(cheek.big), num(cheek.sulks)))),
     h('p', { class: 'rec-note' }, topCheek ? T.records.topCheek(whoName(topCheek[0]), num(topCheek[1])) : T.records.cheekNote),
-    h('div', { class: 'row' }, btn(T.records.lines(foundLines(save), LINE_TOTAL), on.lines, s), btn(T.common.close, on.close, s, 'primary')),
+    h('div', { class: 'row' }, btn(T.records.lines(foundLines(save), lineTotal()), on.lines, s), btn(T.common.close, on.close, s, 'primary')),
   );
 }
 
 // ===================================================================== セリフずかん
 
-const LINE_TOTAL = CHAR_ORDER.length * RESULT_LINE_IDS.length;
-const foundLines = (save: SaveData) => CHAR_ORDER.reduce((n, id) => n + RESULT_LINE_IDS.filter((l) => save.lines.includes(lineKey(id, l))).length, 0);
+/** ずかんのセリフの数（結果のセリフと、ほっぺのひとこと）と、そのうち見つけた数 */
+const lineTotal = () => BOOK_ORDER.reduce((n, who) => n + bookLines(who).length, 0);
+const foundLines = (save: SaveData) => BOOK_ORDER.reduce((n, who) => n + bookLines(who).filter((l) => save.lines.includes(l.key)).length, 0);
 
 export function linesPanel(host: MenuHost, on: { close: () => void }): HTMLElement {
   const s = host.sound;
@@ -448,20 +499,21 @@ export function linesPanel(host: MenuHost, on: { close: () => void }): HTMLEleme
     'div',
     { class: 'panel lines-panel' },
     h('h2', {}, T.linesBook.heading),
-    h('p', { class: 'rec-note' }, T.linesBook.note(foundLines(host.save), LINE_TOTAL)),
-    ...CHAR_ORDER.map((id) => {
-      const got = RESULT_LINE_IDS.filter((l) => found.has(lineKey(id, l))).length;
+    h('p', { class: 'rec-note' }, T.linesBook.note(foundLines(host.save), lineTotal())),
+    ...BOOK_ORDER.map((who) => {
+      const list = bookLines(who);
+      const got = list.filter((l) => found.has(l.key)).length;
       return h(
         'details',
-        { class: 'lines-char', style: `--c:${C[id]}` },
-        h('summary', {}, h('b', {}, T.chars[id].name), h('small', {}, `${got} / ${RESULT_LINE_IDS.length}`)),
+        { class: 'lines-char', style: `--c:${who === 'spiki' ? SPIKI_COLOR : C[who]}` },
+        h('summary', {}, h('b', {}, whoName(who)), h('small', {}, `${got} / ${list.length}`)),
         h(
           'ul',
           {},
-          ...RESULT_LINE_IDS.map((l) =>
-            found.has(lineKey(id, l))
-              ? h('li', { class: 'got' }, h('span', {}, T.common.quote(resultText(id, l))), h('small', {}, resultHint(id, l)))
-              : h('li', {}, h('span', {}, T.linesBook.unknown), h('small', {}, resultHint(id, l))),
+          ...list.map((l) =>
+            found.has(l.key)
+              ? h('li', { class: 'got' }, h('span', {}, T.common.quote(l.text)), h('small', {}, l.hint))
+              : h('li', {}, h('span', {}, T.linesBook.unknown), h('small', {}, l.hint)),
           ),
         ),
       );

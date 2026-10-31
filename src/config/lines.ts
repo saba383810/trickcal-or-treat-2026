@@ -1,7 +1,7 @@
 // キャラのひとこと: 結果のセリフ（遊び方で変わる。見つけたものはセリフずかんに残る）・遊んでいる途中のひとこと・
-// ほっぺを引っぱりすぎた時のひとこと。ここは出す決まりだけで、文言（口調の決まりも）は src/i18n/ja.ts の lines。
+// ほっぺを引っぱりすぎた時のひとこと（これもセリフずかんに残る）。ここは出す決まりだけで、文言（口調の決まりも）は src/i18n/ja.ts の lines。
 import type { RankId } from './balance';
-import type { CharId } from './characters';
+import { CHAR_ORDER, type CharId } from './characters';
 import type { Play } from './missions';
 import { T } from '../i18n';
 import type { CheekWho } from '../storage';
@@ -93,8 +93,30 @@ const PINCH: Record<CheekWho, Expr[]> = {
   spiki: ['worried', 'sulk', 'pinched'],
 };
 
-export function pinchReaction(who: CheekWho, rnd = Math.random): { text: string; expr: Expr } {
+export const pinchKey = (who: CheekWho, i: number) => `${who}.pinch${i}`;
+
+/** key = セリフずかんに残す時の名前 */
+export function pinchReaction(who: CheekWho, rnd = Math.random): { text: string; expr: Expr; key: string } {
   const list = PINCH[who];
   const i = Math.floor(rnd() * list.length);
-  return { text: T.lines.pinch[who][i], expr: list[i] };
+  return { text: T.lines.pinch[who][i], expr: list[i], key: pinchKey(who, i) };
+}
+
+// ===================================================================== セリフずかん
+
+/** ずかんに並べる相手（遊べる 5 人と、スピキ） */
+export const BOOK_ORDER: CheekWho[] = [...CHAR_ORDER, 'spiki'];
+
+export interface BookLine {
+  key: string;
+  text: string;
+  /** まだ見つけていない時に出す、見つけかた */
+  hint: string;
+}
+
+/** その相手の ずかんのセリフ。結果のセリフのあとに、ほっぺを しつこく引っぱった時のひとこと（スピキは ひとことだけ） */
+export function bookLines(who: CheekWho): BookLine[] {
+  const result = who === 'spiki' ? [] : RESULT_LINE_IDS.map((id) => ({ key: lineKey(who, id), text: resultText(who, id), hint: resultHint(who, id) }));
+  const pinch = T.lines.pinch[who].map((text, i) => ({ key: pinchKey(who, i), text, hint: T.linesBook.pinchHint }));
+  return [...result, ...pinch];
 }
