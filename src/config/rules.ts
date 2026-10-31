@@ -33,7 +33,7 @@ export interface Rule {
 
 export const NORMAL: Rule = { id: 'normal', name: 'ふつう', note: 'いつもの ハロウィンの夜' };
 
-/** まよなかモード。ふつうでランク S を取るとあそべる */
+/** まよなかモード。ふつうでランク A を取ると解放 */
 export const NIGHT: Rule = { id: 'night', name: 'まよなか', note: 'お菓子が速くて ホバギも多い。点は 1.2 倍', fall: 0.72, gap: 0.8, hobagi: 2.2, points: 1.2 };
 
 /** 今夜のおかしのルール。日付で順番に回る */
@@ -73,9 +73,9 @@ export function dailySeed(key: string): number {
   return h >>> 0;
 }
 
-/** まよなかモードであそべる（ふつうで、だれかがランク S 以上） */
+/** まよなかモードであそべる（ふつうで、だれかがランク A 以上） */
 export function nightOpen(rank: Partial<Record<CharId, RankId>>): boolean {
-  return Object.values(rank).some((r) => r === 'S' || r === 'SS');
+  return Object.values(rank).some((r) => r === 'A' || r === 'S' || r === 'SS');
 }
 
 export function ruleOf(course: CourseId, key = dayKey()): Rule {

@@ -5,9 +5,10 @@ import type { CharId } from './config/characters';
 import { activeMissions, fits, judgeMissions, playValue, type Mission, type Play } from './config/missions';
 import { dailySeed, dayKey, dayLabel, nightOpen, ruleOf, type CourseId } from './config/rules';
 import { World } from './sim/world';
+import { Tutorial } from './tutorial';
 import { loadSave, writeSave, type SaveData } from './storage';
 import { capture, h } from './ui/dom';
-import { charSelect, howToPanel, pausePanel, recordsPanel, resultPanel, settingsPanel, titleScreen, type MenuHost } from './ui/menus';
+import { charSelect, howToPanel, missionsPanel, pausePanel, recordsPanel, resultPanel, settingsPanel, titleScreen, type MenuHost } from './ui/menus';
 import { SceneCache, drawLiveDecor } from './view/draw/scene';
 import { outlined } from './view/draw/ui';
 import { GameView } from './view/gameView';
@@ -35,9 +36,11 @@ export class App implements MenuHost {
   private course: CourseId = this.save.lastCourse;
   /** 遊び始めた日（今夜のおかしは、遊んでいる途中で日付が変わってもその日の分） */
   private day = dayKey();
-  /** 途中でたっせいが分かるおねがいと、もうお知らせしたもの */
+  /** 途中でクリアが分かるミッションと、もうお知らせしたもの */
   private liveMissions: Mission[] = [];
   private toasted = new Set<string>();
+  /** れんしゅう中（終わったら同じキャラ・コースで本番） */
+  private tutorial: Tutorial | null = null;
   private world: World | null = null;
   private view: GameView | null = null;
   private scene = new SceneCache();
@@ -92,8 +95,9 @@ export class App implements MenuHost {
     this.show(
       titleScreen(this, {
         start: () => this.goSelect(),
-        howTo: () => this.showHowTo(() => this.goTitle()),
+        howTo: () => this.showHowTo(() => this.goTitle(), () => this.startTutorial(this.save.lastChar, 'normal')),
         records: () => this.show(recordsPanel(this, { close: () => this.goTitle() })),
+        missions: () => this.show(missionsPanel(this, { close: () => this.goTitle() })),
         settings: () => this.show(settingsPanel(this, { close: () => this.goTitle() })),
       }),
     );
@@ -104,11 +108,13 @@ export class App implements MenuHost {
     this.show(charSelect(this, { pick: (id, course) => this.start(id, course), back: () => this.goTitle() }));
   }
 
-  private showHowTo(back: () => void): void {
-    this.show(howToPanel(this, { close: back }));
+  private showHowTo(back: () => void, practice?: () => void): void {
+    this.show(howToPanel(this, { close: back, practice }));
   }
 
   private start(id: CharId, course: CourseId = this.course): void {
+    if (!this.save.tutorialDone) return this.startTutorial(id, course);
+    this.tutorial = null;
     this.clearUi();
     this.charId = id;
     this.course = course;
@@ -131,6 +137,38 @@ export class App implements MenuHost {
     this.sound.countdown(false);
   }
 
+  /** れんしゅう。カウントダウンなしで始めて、終わったら本番へ */
+  private startTutorial(id: CharId, course: CourseId): void {
+    this.clearUi();
+    this.charId = id;
+    this.course = course;
+    const world = new World(id, (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0);
+    const view = new GameView(world, id, this.screen, this.sound, this.bgm, this.scene);
+    const tutorial = new Tutorial(world, () => view.touchUI);
+    view.onPause = () => this.pause();
+    view.hintComfort = false;
+    view.hintMove = false;
+    view.fx.reduced = this.save.calm;
+    view.coach = tutorial.coach;
+    view.enable();
+    this.world = world;
+    this.view = view;
+    this.tutorial = tutorial;
+    this.liveMissions = [];
+    this.acc = 0;
+    this.mode = 'playing';
+    this.bgm.mode = 'normal';
+    this.startBgm();
+  }
+
+  private endTutorial(): void {
+    this.save.tutorialDone = true;
+    this.persist();
+    this.tutorial = null;
+    this.bgm.stop();
+    this.start(this.charId, this.course);
+  }
+
   private pause(): void {
     if (this.mode !== 'playing' && this.mode !== 'countdown') return;
     this.pausedFrom = this.mode;
@@ -142,8 +180,9 @@ export class App implements MenuHost {
 
   private showPause(): void {
     this.show(
-      pausePanel(this, this.play(this.world!), {
+      pausePanel(this, this.tutorial ? null : this.play(this.world!), {
         resume: () => this.resume(),
+        skip: this.tutorial ? () => this.endTutorial() : undefined,
         retry: () => this.start(this.charId, this.course),
         select: () => this.goSelect(),
         howTo: () => this.showHowTo(() => this.showPause()),
@@ -176,7 +215,7 @@ export class App implements MenuHost {
     return save;
   }
 
-  /** 遊んでいる途中でたっせいしたおねがいを、ゲームの画面でお知らせする */
+  /** 遊んでいる途中でクリアしたミッションを、ゲームの画面でお知らせする */
   private checkLiveMissions(): void {
     const w = this.world!;
     for (const m of this.liveMissions) {
@@ -227,8 +266,9 @@ export class App implements MenuHost {
   }
 
   /**
-   * 開発用: URL の ?dev=select|howto|settings|records|pause|play|result で画面を飛ばす（スクリーンショットの確認用）。
+   * 開発用: URL の ?dev=select|howto|settings|records|missions|tutorial|pause|play|result で画面を飛ばす（スクリーンショットの確認用）。
    * play は &char= &course=daily|night &t=（その秒まで進める） &cry=（スピキの泣きレベル） &fever &bot（ボットが遊ぶ）
+   * tutorial は &step=catch|dodge|comfort|gifts|done（そのステップから）
    */
   devJump(q: URLSearchParams, makeBot: (w: World) => { step(): void }): void {
     const dev = q.get('dev');
@@ -239,6 +279,17 @@ export class App implements MenuHost {
     if (dev === 'howto') return this.showHowTo(() => this.goTitle());
     if (dev === 'settings') return this.show(settingsPanel(this, { close: () => this.goTitle() }));
     if (dev === 'records') return this.show(recordsPanel(this, { close: () => this.goTitle() }));
+    if (dev === 'missions') return this.show(missionsPanel(this, { close: () => this.goTitle() }));
+    if (dev === 'tutorial') {
+      this.startTutorial(id, this.course);
+      const step = q.get('step');
+      if (step) (this.tutorial as unknown as { enter(s: string): void }).enter(step);
+      if (step === 'comfort') {
+        this.world!.spiki.level = 1;
+        this.world!.spiki.cry = 3;
+      }
+      return;
+    }
     this.start(id);
     const w = this.world!;
     const view = this.view!;
@@ -409,9 +460,14 @@ export class App implements MenuHost {
         while (this.acc >= STEP) {
           this.devBot?.step();
           world!.update(STEP);
+          this.tutorial?.update(STEP);
           this.acc -= STEP;
         }
         this.checkLiveMissions();
+        if (this.tutorial) {
+          view!.coach = this.tutorial.coach;
+          if (this.tutorial.finished) return this.endTutorial();
+        }
         if (world!.over) {
           this.mode = 'closing';
           this.timer = CLOSING;

@@ -21,7 +21,7 @@ function pct(sorted: number[], p: number): number {
 
 it('balance report', () => {
   const lines: string[] = [`ルール: ${RULE.name}　ランク: ${RANKS.map((r) => `${r.id} ${r.min}`).join(' / ')}`];
-  // おねがいごとの、1 回でたっせいできた割合（キャラ・コースの決まりがあるものは、そのキャラ・コースの回だけで数える）
+  // ミッションごとの、1 回でクリアできた割合（キャラ・コースの決まりがあるものは、そのキャラ・コースの回だけで数える）
   const missionHit = SKILLS.map(() => new Map<string, [number, number]>());
   for (const skill of SKILLS) {
     lines.push(`\n■ ${skill.name}`);
@@ -69,7 +69,7 @@ it('balance report', () => {
       );
     }
   }
-  lines.push(`\n■ おねがい（1 回でたっせいできた割合: ${SKILLS.map((k) => k.name).join(' / ')}）`);
+  lines.push(`\n■ ミッション（1 回でクリアできた割合: ${SKILLS.map((k) => k.name).join(' / ')}）`);
   for (const m of MISSIONS) {
     if (!m.play) continue;
     const cells = missionHit.map((hit) => {

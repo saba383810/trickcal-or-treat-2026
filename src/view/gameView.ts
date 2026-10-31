@@ -15,6 +15,7 @@ import { Effects } from './effects';
 import { fx, fy, inside, makeLayout, type Layout, type Point, type Rect } from './layout';
 import { C, font, popFont } from './palette';
 import type { Screen } from './screen';
+import type { Coach } from '../tutorial';
 
 /** 動かしたとみなす指の移動（px） */
 const DRAG_START = 8;
@@ -31,7 +32,7 @@ const KIND_COLOR: Record<ItemKind, string> = {
   hobagi: C.orange,
 };
 
-/** おねがいたっせいのお知らせを出しておく秒数 */
+/** ミッションクリアのお知らせを出しておく秒数 */
 const TOAST = 2.6;
 const CRY_TEXT = ['', 'ｳｪｪﾝ…', 'ｳｱｱｰﾝ!!', 'ｳｱｱｱｱｱﾝ!!!'];
 
@@ -102,6 +103,8 @@ export class GameView {
   private flying: Flying[] = [];
   private banners: Banner[] = [];
   private toasts: { text: string; t: number }[] = [];
+  /** れんしゅう中の説明（なければ出さない） */
+  coach: Coach | null = null;
   private shownScore = 0;
   private scorePop = 0;
   private chainPop = 0;
@@ -307,7 +310,7 @@ export class GameView {
 
   // ===================================================================== 更新
 
-  /** おねがいをたっせいした時のお知らせ（画面の上のほうに、1 つずつ） */
+  /** ミッションをクリアした時のお知らせ（画面の上のほうに、1 つずつ） */
   toast(text: string): void {
     this.toasts.push({ text, t: 0 });
   }
@@ -564,6 +567,7 @@ export class GameView {
     this.drawHints(c);
     this.drawBanners(c);
     this.drawToast(c);
+    this.drawCoach(c);
   }
 
   private drawFeverBack(c: CanvasRenderingContext2D): void {
@@ -854,7 +858,12 @@ export class GameView {
     // のこり時間
     const t = L.timer;
     this.panel(c, t, w.overtime);
-    outlined(c, w.overtime ? 'えんちょう!' : 'のこり', t.x + 18, t.y + labelSize * 0.9, { size: labelSize, fill: w.overtime ? C.fever : C.gold, align: 'left', width: 4 });
+    outlined(c, w.practice ? 'れんしゅう' : w.overtime ? 'えんちょう!' : 'のこり', t.x + 18, t.y + labelSize * 0.9, {
+      size: labelSize,
+      fill: w.overtime ? C.fever : C.gold,
+      align: 'left',
+      width: 4,
+    });
     const left = Math.ceil(w.left);
     const urgent = left <= 5 && !w.overtime;
     c.save();
@@ -862,7 +871,7 @@ export class GameView {
     const tp = 1 + this.timerPop * 0.25;
     c.scale(tp, tp);
     const ts = t.h * 0.52;
-    outlined(c, w.overtime ? '♪' : `${left}`, 0, 0, { size: ts, font: popFont(ts), align: 'right', fill: urgent ? '#ff8a8a' : C.white, width: 7 });
+    outlined(c, w.overtime || w.practice ? '♪' : `${left}`, 0, 0, { size: ts, font: popFont(ts), align: 'right', fill: urgent ? '#ff8a8a' : C.white, width: 7 });
     c.restore();
     // 時間のバー
     const prog = Math.min(1, w.time / BALANCE.duration);
@@ -986,7 +995,7 @@ export class GameView {
     }
     if (this.hintComfort && w.crying && !w.over) {
       const s = L.spiki;
-      const text = this.touchUI ? 'タップでなぐさめて!' : 'クリック / ↑キーでなぐさめて!';
+      const text = this.touchUI ? 'スピキを タップで なぐさめて!' : 'Space キーで なぐさめて!';
       const size = L.portrait ? 20 : 20;
       const y = s.feet + s.r * 0.75;
       const a = 0.7 + 0.3 * Math.sin(this.t * 6);
@@ -1000,6 +1009,73 @@ export class GameView {
     }
   }
 
+  /** れんしゅうの説明（上のほう）と、スピキを指す矢印・押すキー */
+  private drawCoach(c: CanvasRenderingContext2D): void {
+    const co = this.coach;
+    if (!co) return;
+    const L = this.L;
+    const f = L.field;
+    // 縦画面は全体が縮んで見えるので、大きめに出す
+    const k = L.portrait ? 1.45 : Math.min(1, f.w / 420);
+    c.save();
+    c.font = popFont(22 * k);
+    const tw = Math.max(c.measureText(co.text).width, co.sub ? (c.measureText(co.sub).width * 15) / 22 : 0);
+    const w = Math.min(f.w - 16, tw + 48 * k);
+    const h = (co.sub ? 78 : 56) * k;
+    const x = f.x + (f.w - w) / 2;
+    const y = f.y + 12 * k;
+    roundRect(c, x, y, w, h, 18 * k);
+    c.fillStyle = 'rgba(40, 20, 70, 0.9)';
+    c.fill();
+    c.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    c.lineWidth = 2.5;
+    c.stroke();
+    // 何ステップ目か
+    outlined(c, `れんしゅう ${co.step}/5`, x + 14 * k, y - 2 * k, { size: 13 * k, fill: C.gold, align: 'left', width: 4 });
+    outlined(c, co.text, f.x + f.w / 2, y + 30 * k, { size: 22 * k, font: popFont(22 * k), fill: C.white, width: 6 });
+    if (co.sub) outlined(c, co.sub, f.x + f.w / 2, y + 58 * k, { size: 14 * k, fill: '#d9cdf0', width: 4 });
+    c.restore();
+    if (!co.spiki) return;
+    // スピキの上で はずむ矢印。PC はその下に押すキー
+    const s = L.spiki;
+    const a = L.portrait ? 1.4 : 1;
+    const bob = Math.sin(this.t * 7) * 6 * a;
+    c.save();
+    c.translate(s.x, s.y - s.r * 2.1 + bob);
+    c.scale(a, a);
+    c.beginPath();
+    c.moveTo(0, 18);
+    c.lineTo(-16, -4);
+    c.lineTo(-6, -4);
+    c.lineTo(-6, -22);
+    c.lineTo(6, -22);
+    c.lineTo(6, -4);
+    c.lineTo(16, -4);
+    c.closePath();
+    c.fillStyle = C.gold;
+    c.fill();
+    c.strokeStyle = C.ink;
+    c.lineWidth = 3;
+    c.stroke();
+    c.restore();
+    c.save();
+    const label = co.key ?? 'タップ!';
+    const size = 18 * a;
+    c.font = popFont(size);
+    const lw = c.measureText(label).width + 24 * a;
+    const lh = 32 * a;
+    const ly = s.feet + 8;
+    const lx = Math.min(L.w - lw / 2 - 8, s.x);
+    roundRect(c, lx - lw / 2, ly, lw, lh, (co.key ? 8 : 16) * a);
+    c.fillStyle = co.key ? '#f4efe6' : C.pink;
+    c.fill();
+    c.strokeStyle = C.ink;
+    c.lineWidth = 3;
+    c.stroke();
+    outlined(c, label, lx, ly + lh / 2 + 1, { size, font: popFont(size), fill: co.key ? C.ink : C.white, stroke: co.key ? '#fff' : C.ink, width: co.key ? 3 : 5 });
+    c.restore();
+  }
+
   private drawToast(c: CanvasRenderingContext2D): void {
     const ts = this.toasts[0];
     if (!ts) return;
@@ -1011,7 +1087,7 @@ export class GameView {
     const outK = Math.max(0, (ts.t - (TOAST - 0.3)) / 0.3);
     const ease = (x: number) => 1 - Math.pow(1 - x, 3);
     const y = f.y + 14 * k - (1 - ease(inK) + ease(outK)) * 40 * k;
-    const head = 'おねがい たっせい!';
+    const head = 'ミッション クリア!';
     c.save();
     c.globalAlpha = Math.min(ease(inK), 1 - outK);
     c.font = font(17 * k);

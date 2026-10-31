@@ -59,13 +59,14 @@ describe('ルール', () => {
     expect(w.feverNeed).toBe(2);
   });
 
-  it('まよなかは、ふつうでランク S を取るとあそべる', () => {
-    expect(nightOpen({ kommy: 'A' })).toBe(false);
-    expect(nightOpen({ kommy: 'A', elfin: 'S' })).toBe(true);
+  it('まよなかは、ふつうでランク A を取ると解放', () => {
+    expect(nightOpen({ kommy: 'B' })).toBe(false);
+    expect(nightOpen({ kommy: 'B', elfin: 'A' })).toBe(true);
+    expect(nightOpen({ joanne: 'SS' })).toBe(true);
   });
 });
 
-describe('おねがい', () => {
+describe('ミッション', () => {
   let save: SaveData;
   beforeEach(() => {
     vi.stubGlobal('window', { localStorage: { getItem: () => null, setItem: () => {} } });
@@ -80,7 +81,7 @@ describe('おねがい', () => {
     expect(activeMissions(save).map((m) => m.id)).toEqual(MISSIONS.slice(0, MISSION_SLOTS).map((m) => m.id));
   });
 
-  it('たっせいすると次が出て、ごほうびのおかしが足される', () => {
+  it('クリアすると次が出て、ごほうびのおかしが足される', () => {
     const before = save.sweets;
     const cleared = judgeMissions(save, play({ stats: stats({ caught: { candy: 20, star: 0, mokaron: 0, shucaron: 0, hobagi: 0 } }) }));
     expect(cleared.map((m) => m.id)).toEqual(['first', 'candy15']);
@@ -88,7 +89,7 @@ describe('おねがい', () => {
     expect(activeMissions(save).map((m) => m.id)).toEqual(['comfort1', 'fever1', 'chain20']);
   });
 
-  it('いまのおねがいでないものは、できていても数えない', () => {
+  it('いまのミッションでないものは、できていても数えない', () => {
     judgeMissions(save, play({ stats: stats({ maxChain: 999, fevers: 9 }) }));
     expect(save.missions).toEqual(['first']);
   });
@@ -101,7 +102,7 @@ describe('おねがい', () => {
     expect(save.missionBest.candy15).toBe(9);
   });
 
-  it('キャラ・コースの決まりがあるおねがいは、そのキャラ・コースでだけ数える', () => {
+  it('キャラ・コースの決まりがあるミッションは、そのキャラ・コースでだけ数える', () => {
     const elfin = MISSIONS.findIndex((m) => m.id === 'elfinStar');
     save.missions = MISSIONS.slice(0, elfin).map((m) => m.id);
     const many = stats({ caught: { candy: 0, star: 30, mokaron: 0, shucaron: 0, hobagi: 0 } });
@@ -111,7 +112,7 @@ describe('おねがい', () => {
     expect(save.missions).toContain('elfinStar');
   });
 
-  it('記録で数えるおねがい（何人で遊んだか）', () => {
+  it('記録で数えるミッション（何人で遊んだか）', () => {
     const i = MISSIONS.findIndex((m) => m.id === 'chars2');
     save.missions = MISSIONS.slice(0, i).map((m) => m.id);
     save.charPlays = { kommy: 3 };

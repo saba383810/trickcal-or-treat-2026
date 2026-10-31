@@ -1015,8 +1015,7 @@ canvas.pic {
   color: var(--ink-soft);
 }
 
-.missions ul,
-.rec-missions ul {
+.missions ul {
   display: grid;
   gap: 4px;
   margin: 0;
@@ -1132,6 +1131,15 @@ canvas.pic {
   color: var(--gold);
 }
 
+/* 押すとミッション画面 */
+.missions.link {
+  cursor: pointer;
+}
+
+.title .missions.link:hover {
+  background: rgba(60, 30, 100, 0.85);
+}
+
 .title .missions-head small {
   color: #d9cdf0;
 }
@@ -1210,6 +1218,7 @@ canvas.pic {
 .tab small {
   font-size: 11px;
   font-weight: 400;
+  white-space: nowrap;
 }
 
 .tab.on {
@@ -1280,22 +1289,13 @@ canvas.pic {
   color: var(--ink-soft);
 }
 
-.rec-missions {
-  margin-top: 14px;
+/* ミッション画面 */
+.missions-panel .missions {
+  margin-top: 0;
 }
 
-.rec-missions summary {
-  padding: 8px 12px;
-  font-weight: 800;
-  color: var(--orange-deep);
-  cursor: pointer;
-  background: #fff6dc;
-  border: 2px solid var(--gold);
-  border-radius: 12px;
-}
-
-.rec-missions ul {
-  margin-top: 6px;
+.missions-panel .rec-note {
+  margin: 6px 0 4px;
 }
 
 /* ------------------------------------------------------------------ 小さい画面 */
@@ -1357,6 +1357,10 @@ canvas.pic {
   .tab {
     min-height: 38px;
     font-size: 13px;
+  }
+
+  .tab small {
+    font-size: 10px;
   }
 
   .mission {

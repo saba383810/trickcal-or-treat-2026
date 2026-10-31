@@ -1,5 +1,5 @@
-// おねがい（小さな目標）。リストの順に 3 つずつ出て、たっせいすると次のおねがいが出る。
-// たっせいすると、ごほうびのおかしが「今までのおかし」（称号）に足される。
+// ミッション（小さな目標）。リストの順に 3 つずつ出て、クリアすると次のミッションが出る。
+// クリアすると、ごほうびのおかしが「今までのおかし」（称号）に足される。
 import { RANKS, type RankId } from './balance';
 import type { CharId } from './characters';
 import type { CourseId } from './rules';
@@ -24,7 +24,7 @@ export interface Mission {
   play?: (p: Play) => number;
   /** 記録（何人で遊んだか など）で数える */
   total?: (s: SaveData) => number;
-  /** 遊んでいる途中で数が減らない。たっせいした時にゲームの画面に出す */
+  /** 遊んでいる途中で数が減らない。クリアした時にゲームの画面に出す */
   live?: boolean;
   /** このキャラで遊んだ時だけ */
   char?: CharId;
@@ -32,7 +32,7 @@ export interface Mission {
   course?: CourseId;
 }
 
-/** 一度にならぶおねがいの数 */
+/** 一度にならぶミッションの数 */
 export const MISSION_SLOTS = 3;
 
 const sweets = (s: Stats) => s.caught.candy + s.caught.star + s.caught.mokaron + s.caught.shucaron;
@@ -102,13 +102,13 @@ export const MISSIONS: Mission[] = [
   rank('nightS', 'S', 200, { text: '「まよなか」で ランク S を とる', course: 'night' }),
 ];
 
-/** いまのおねがい（まだのものから、リストの順に） */
+/** いまのミッション（まだのものから、リストの順に） */
 export function activeMissions(save: SaveData): Mission[] {
   const done = new Set(save.missions);
   return MISSIONS.filter((m) => !done.has(m.id)).slice(0, MISSION_SLOTS);
 }
 
-/** このキャラ・コースのプレイで数えるおねがい（記録で数えるものは入らない） */
+/** このキャラ・コースのプレイで数えるミッション（記録で数えるものは入らない） */
 export function fits(m: Mission, char: CharId, course: CourseId): boolean {
   return m.play !== undefined && (!m.char || m.char === char) && (!m.course || m.course === course);
 }
@@ -124,8 +124,8 @@ export function progressOf(m: Mission, save: SaveData): number {
 }
 
 /**
- * 遊び終わった時に、いまのおねがいを判定する（記録はこのプレイの分を足してから呼ぶ）。
- * たっせいしたものを返し、save に書きこむ（ごほうびのおかしも足す）
+ * 遊び終わった時に、いまのミッションを判定する（記録はこのプレイの分を足してから呼ぶ）。
+ * クリアしたものを返し、save に書きこむ（ごほうびのおかしも足す）
  */
 export function judgeMissions(save: SaveData, p: Play): Mission[] {
   const cleared: Mission[] = [];

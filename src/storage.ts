@@ -24,10 +24,12 @@ export interface SaveData {
   daily: { day: string; best: Partial<Record<CharId, number>> };
   /** 今夜のおかしを遊んだ日数 */
   dailyDays: number;
-  /** たっせいしたおねがい（id） */
+  /** クリアしたミッション（id） */
   missions: string[];
-  /** おねがいの、1 回でのさいこう記録（あと少し、を見せる） */
+  /** ミッションの、1 回でのさいこう記録（あと少し、を見せる） */
   missionBest: Record<string, number>;
+  /** れんしゅう（チュートリアル）を終えた */
+  tutorialDone: boolean;
   lastChar: CharId;
   lastCourse: CourseId;
   sfxVolume: number;
@@ -50,6 +52,7 @@ function defaults(): SaveData {
     dailyDays: 0,
     missions: [],
     missionBest: {},
+    tutorialDone: false,
     lastChar: 'kommy',
     lastCourse: 'normal',
     sfxVolume: 0.8,
@@ -77,6 +80,8 @@ export function loadSave(): SaveData {
     };
     if (!CHAR_ORDER.includes(d.lastChar)) d.lastChar = 'kommy';
     if (!['normal', 'daily', 'night'].includes(d.lastCourse)) d.lastCourse = 'normal';
+    // 前の版の記録: もう遊んだことがあれば、れんしゅうは出さない（あそびかたから できる）
+    if (data.tutorialDone === undefined) d.tutorialDone = d.plays > 0;
     // 前の版の記録: ベストがあるキャラは 1 回は遊んでいる
     if (!data.charPlays) for (const id of CHAR_ORDER) if (d.best[id] !== undefined) d.charPlays[id] = 1;
     return d;

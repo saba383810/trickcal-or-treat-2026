@@ -85,6 +85,8 @@ export class World {
   readonly rng: Rng;
   /** コースのルール（今夜のおかし・まよなか） */
   readonly rule: Rule;
+  /** れんしゅう（チュートリアル）: お菓子は外から降らせ、時間切れにならない */
+  practice = false;
   /** キャッチの高さ（キャラの頭の中心。縦の正規化座標）。画面の縦横比で変わる（遊んでいる途中に画面を回したら変える） */
   catchY: number;
   time = 0;
@@ -133,11 +135,13 @@ export class World {
 
   /** 残り秒（フィーバーで延長中は 0） */
   get left(): number {
+    if (this.practice) return BALANCE.duration;
     return Math.max(0, BALANCE.duration - this.time);
   }
 
   /** 進み具合 0〜1 */
   get progress(): number {
+    if (this.practice) return 0;
     return Math.min(1, this.time / BALANCE.duration);
   }
 
@@ -147,7 +151,7 @@ export class World {
 
   /** 時間切れのあと、フィーバーが終わるまで延長している */
   get overtime(): boolean {
-    return this.time >= BALANCE.duration && this.fever > 0;
+    return !this.practice && this.time >= BALANCE.duration && this.fever > 0;
   }
 
   get feverNeed(): number {
@@ -224,8 +228,8 @@ export class World {
 
   /** パターンの予約を時間どおりに出し、次のパターンとモカロンを決める */
   private direct(): void {
-    const playing = this.time < BALANCE.duration;
-    if (this.fever > 0) {
+    const playing = this.time < BALANCE.duration && !this.practice;
+    if (this.fever > 0 && !this.practice) {
       if (this.time >= this.nextFever) {
         const x = feverX(this.feverT, this.rng, this.feverLen);
         this.spawn({ at: this.time, kind: 'shucaron', x });
@@ -510,6 +514,7 @@ export class World {
   // ---------------------------------------------------------------- 時計
 
   private updateClock(): void {
+    if (this.practice) return;
     const left = this.left;
     if (!this.spurtShown && left <= BALANCE.lastSpurt && this.time < BALANCE.duration) {
       this.spurtShown = true;
