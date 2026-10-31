@@ -239,18 +239,8 @@ export function mochiChibi(
   let sulkExpr: Expr = 'sulk';
   const sulking = () => performance.now() < sulkUntil;
   const recent: number[] = [];
-  const talk = (text: string) => {
-    // 吹き出しを ほかの所に出したい時（キャラえらびのカードは、吹き出しが となりのカードにかぶる）
-    if (opts.onTalk) return opts.onTalk(text, SULK_MS);
-    wrap.querySelector('.mochi-talk')?.remove();
-    const el = h('span', { class: 'mochi-talk' }, text);
-    wrap.append(el);
-    // 画面の端で はみ出さないように寄せる
-    const r = el.getBoundingClientRect();
-    const dx = Math.max(0, 6 - r.left) - Math.max(0, r.right - (document.documentElement.clientWidth - 6));
-    if (dx) el.style.setProperty('--dx', `${dx}px`);
-    setTimeout(() => el.remove(), SULK_MS);
-  };
+  // 吹き出しを ほかの所に出したい時は onTalk（キャラえらびのカードは、カードの上に出す）
+  const talk = (text: string) => (opts.onTalk ? opts.onTalk(text, SULK_MS) : talkBubble(wrap, text, SULK_MS));
   const end = (e: PointerEvent) => {
     const g = mochi.pinch.find(e.pointerId);
     if (!g) return;
@@ -356,6 +346,17 @@ export function starsText(n: number, max = 5): HTMLElement {
   const wrap = h('span', { class: 'stars', 'aria-label': `★${n}` });
   for (let i = 0; i < max; i++) wrap.append(h('span', { class: i < n ? 'star on' : 'star' }, '★'));
   return wrap;
+}
+
+/** 吹き出しを host の上に出して、ms で消す（画面の端で はみ出さないように寄せる） */
+export function talkBubble(host: HTMLElement, text: string, ms: number): void {
+  host.querySelector(':scope > .mochi-talk')?.remove();
+  const el = h('span', { class: 'mochi-talk' }, text);
+  host.append(el);
+  const r = el.getBoundingClientRect();
+  const dx = Math.max(0, 6 - r.left) - Math.max(0, r.right - (document.documentElement.clientWidth - 6));
+  if (dx) el.style.setProperty('--dx', `${dx}px`);
+  setTimeout(() => el.remove(), ms);
 }
 
 /** setPointerCapture は、もう離れた指だと投げる */

@@ -964,6 +964,35 @@ canvas.pic {
   animation: talk-in 0.2s ease-out;
 }
 
+/* キャラえらびのカードでは、カードの上に出す（絵の上だと となりのカードにかぶる）。しっぽは 引っぱったキャラに向ける */
+.card > .mochi-talk {
+  bottom: calc(100% + 9px);
+  width: max-content;
+  max-width: min(300px, calc(100vw - 24px));
+  white-space: normal;
+}
+
+.card > .mochi-talk::before,
+.card > .mochi-talk::after {
+  position: absolute;
+  left: calc(50% - var(--dx, 0px));
+  content: '';
+  border: solid transparent;
+  transform: translateX(-50%);
+}
+
+.card > .mochi-talk::before {
+  top: 100%;
+  border-width: 9px 7px 0;
+  border-top-color: var(--line-ink);
+}
+
+.card > .mochi-talk::after {
+  top: calc(100% - 3px);
+  border-width: 7px 5px 0;
+  border-top-color: #fff;
+}
+
 @keyframes talk-in {
   from {
     opacity: 0;

@@ -12,7 +12,7 @@ import { CHAR_SPECS, SPIKEY, SPIKI } from '../view/draw/characters';
 import type { ChibiSpec, Expr } from '../view/draw/chibi';
 import { LOGO_H, LOGO_W, drawLogo } from '../view/draw/logo';
 import { C, font } from '../view/palette';
-import { h, itemCanvas, mochiChibi, paintCanvas, starsText } from './dom';
+import { h, itemCanvas, mochiChibi, paintCanvas, starsText, talkBubble } from './dom';
 
 export interface MenuHost {
   save: SaveData;
@@ -255,7 +255,7 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId, course: Cour
   const cards = h('div', { class: 'cards' });
   const cardEls = new Map<CharId, HTMLElement>();
 
-  // ほっぺを しつこく引っぱった時のひとことは、下のせつめいの セリフの所に、大きい顔から出る吹き出しで出す（カードの上に出すと となりのカードにかぶる）
+  // 下のせつめいの大きい顔を しつこく引っぱった時のひとことは、せつめいの セリフの所に、顔から出る吹き出しで出す
   const helloEls = new Map<CharId, HTMLElement>();
   const helloTimers = new Map<CharId, number>();
   const say = (id: CharId) => (text: string, ms: number) => {
@@ -364,8 +364,8 @@ export function charSelect(host: MenuHost, on: { pick: (id: CharId, course: Cour
           choose(id);
         },
       },
-      // ほっぺをつまんでも、そのキャラをえらぶ
-      mochiChibi(CHAR_SPECS[id], 'normal', 30, { sound: s, who: id, onGrab: () => choose(id), onTalk: say(id) }),
+      // ほっぺをつまんでも、そのキャラをえらぶ。しつこく引っぱった時の吹き出しは、絵の上だと となりのカードにかぶるので カードの上に出す
+      mochiChibi(CHAR_SPECS[id], 'normal', 30, { sound: s, who: id, onGrab: () => choose(id), onTalk: (text, ms) => talkBubble(card, text, ms) }),
       h('span', { class: 'card-name' }, h('small', {}, tx.costume), tx.name),
       badgeSlot,
     );
