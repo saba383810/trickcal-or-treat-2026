@@ -292,7 +292,7 @@ export const en: Strings = {
       },
     },
     pinch: {
-      kommy: ["You'll stretch them... Kommy's going to bed.", "You're persistent, Master... Tch."],
+      kommy: ["You'll stretch them... Kommy's going to bed.", "You're persistent, Master..."],
       elfin: ["Hey! You'll stretch them out!", "Ugh! Gimme chocolate and I'll forgive you."],
       butter: ['Hehe, that tickles, Master!', 'Will you play with me more, Master?'],
       yomi: ['Pull that hard, and the moon will wane...', 'Hehe... is my moon playing tricks?'],
