@@ -68,8 +68,9 @@ describe('原作の口調', () => {
     }
   });
 
-  it('エルフィンは 名前で自分を呼ばない（一人称は 私）', () => {
+  it('エルフィンは 名前で自分を呼ばない（一人称は 私）。「女王」と自分を呼ぶのは いばる時・言い訳の時だけ', () => {
     for (const t of spoken('elfin')) expect(t, t).not.toContain('エルフィン');
+    expect(spoken('elfin').filter((t) => t.includes('女王')).length).toBeLessThanOrEqual(2);
   });
 
   it('バターは「がおー」と言わない（犬の獣人）。ほっぺを引っぱっても怒らない', () => {
@@ -79,6 +80,10 @@ describe('原作の口調', () => {
 
   it('ヨミの「〜のです」は 1 セリフに 1 回まで', () => {
     for (const t of spoken('yomi')) expect(t.split('のです').length - 1, t).toBeLessThanOrEqual(1);
+  });
+
+  it('ジョアンの決めゼリフ「惑わされてはならぬ」は、そのまま使わない（公式のセリフ）', () => {
+    for (const t of spoken('joanne')) expect(t.replace(/\s/g, ''), t).not.toContain('惑わされてはならぬ');
   });
 
   it('ジョアンは 教主様を見下ろさない（「そなた」と言わない）', () => {
